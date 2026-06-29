@@ -3,6 +3,7 @@
 
   const ROUTE = "/plugin/folder-view";
   const NAV_ID = "stash-folder-view-nav";
+  const LAUNCHER_ID = "stash-folder-view-launcher";
   const APP_ID = "stash-folder-view-root";
   const PAGE_SIZE = 250;
 
@@ -90,6 +91,7 @@
   function addNav() {
     try {
       if (document.getElementById(NAV_ID)) {
+        removeLauncher();
         return;
       }
 
@@ -103,13 +105,34 @@
       const button = el("button", "btn btn-secondary stash-fv-nav-button");
       button.type = "button";
       button.setAttribute("aria-label", "Folder View");
-      button.appendChild(el("span", "stash-fv-nav-icon", "Folders"));
+      button.appendChild(el("span", "stash-fv-nav-icon", "Folder View"));
       button.addEventListener("click", navigate);
       wrap.appendChild(button);
       nav.appendChild(wrap);
+      removeLauncher();
     } catch (error) {
       console.error("[Folder View] failed adding nav", error);
     }
+  }
+
+  function removeLauncher() {
+    const launcher = document.getElementById(LAUNCHER_ID);
+    if (launcher) {
+      launcher.remove();
+    }
+  }
+
+  function addLauncher() {
+    if (document.getElementById(NAV_ID) || document.getElementById(LAUNCHER_ID)) {
+      return;
+    }
+
+    const launcher = el("button", "stash-fv-launcher", "Folder View");
+    launcher.id = LAUNCHER_ID;
+    launcher.type = "button";
+    launcher.setAttribute("aria-label", "Open Folder View");
+    launcher.addEventListener("click", navigate);
+    document.body.appendChild(launcher);
   }
 
   function getApp() {
@@ -481,6 +504,10 @@
   function install() {
     patchHistory();
     addNav();
+    window.setTimeout(() => {
+      addNav();
+      addLauncher();
+    }, 1500);
     render();
   }
 

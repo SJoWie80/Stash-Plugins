@@ -8,8 +8,8 @@
   const PAGE_SIZE = 200;
   const MAX_PAGES = 100;
   const TYPES = {
-    scenes: { label: "Scenes", listKey: "scenes", resultKey: "findScenes", route: "/scenes/" },
-    galleries: { label: "Galleries", listKey: "galleries", resultKey: "findGalleries", route: "/galleries/" },
+    scenes: { label: "Scenes", listKey: "scenes", resultKey: "findScenes", route: "/scenes/", query: "?qsort=date&qfp=1&continue=false" },
+    galleries: { label: "Galleries", listKey: "galleries", resultKey: "findGalleries", route: "/galleries/", query: "?qsort=date&qfp=1" },
     images: { label: "Images", listKey: "images", resultKey: "findImages", route: "/images/" },
   };
 
@@ -127,9 +127,16 @@
       app = el("main", "stash-fv-app");
       app.id = APP_ID;
       app.hidden = true;
-      document.body.appendChild(app);
+      const mount = document.querySelector(".main, main, .content, .container-fluid") || document.body;
+      mount.appendChild(app);
     }
     return app;
+  }
+
+  function setHostActive(app, active) {
+    const host = app && app.parentElement;
+    if (!host || host === document.body) return;
+    host.classList.toggle("stash-fv-host-active", active);
   }
 
   async function graphql(query, variables) {
@@ -188,6 +195,9 @@
   }
 
   function folderPath(item) {
+    if (state.type === "galleries" && item.folder && item.folder.path) {
+      return normalizePath(item.folder.path);
+    }
     const file = firstFile(item);
     const parent = file && file.parent_folder && file.parent_folder.path;
     if (parent) return normalizePath(parent);
@@ -360,6 +370,7 @@
           galleries {
             id title date image_count
             paths { cover }
+            folder { path basename }
             files { id path basename parent_folder { path basename } }
             studio { name }
             performers { name }
@@ -450,7 +461,8 @@
   }
 
   function openItem(item) {
-    window.history.pushState({}, "", `${TYPES[state.type].route}${item.id}`);
+    const config = TYPES[state.type];
+    window.history.pushState({}, "", `${config.route}${item.id}${config.query || ""}`);
     notifyRouteChange();
   }
 
@@ -584,10 +596,12 @@
       const navButton = document.querySelector(`#${NAV_ID} .stash-fv-nav-button`);
       if (navButton) navButton.classList.toggle("active", isRoute());
       if (!isRoute()) {
+        setHostActive(app, false);
         app.hidden = true;
         return;
       }
       app.hidden = false;
+      setHostActive(app, true);
       clear(app);
       const shell = el("section", "stash-fv-shell");
       const header = el("div", "stash-fv-titlebar");

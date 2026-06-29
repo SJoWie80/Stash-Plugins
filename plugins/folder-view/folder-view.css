@@ -27,15 +27,18 @@
   display: none !important;
 }
 
+.stash-fv-host-active > :not(#stash-folder-view-root) {
+  display: none !important;
+}
+
 .stash-fv-app {
   background: var(--body-bg, #202124);
   color: var(--body-color, #f3f4f6);
-  inset: 0;
-  min-height: 100vh;
-  overflow: auto;
+  min-height: calc(100vh - 56px);
+  overflow: visible;
   padding: 1.25rem;
-  position: fixed;
-  z-index: 9998;
+  position: relative;
+  z-index: 1;
 }
 
 .stash-fv-shell {

@@ -1,0 +1,10 @@
+name: Folder View
+description: Browse scenes and galleries grouped by their filesystem folders.
+version: 1.0.0
+url: https://github.com/SJoWie80/Stash-Plugins
+interface: raw
+ui:
+  javascript:
+    - folder-view.js
+  css:
+    - folder-view.css

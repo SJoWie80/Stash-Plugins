@@ -27,10 +27,6 @@
   display: none !important;
 }
 
-.stash-fv-host-active > :not(#stash-folder-view-root) {
-  display: none !important;
-}
-
 .stash-fv-app {
   background: var(--body-bg, #202124);
   color: var(--body-color, #f3f4f6);

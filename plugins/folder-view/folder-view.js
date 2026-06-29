@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const HASH_ROUTE = "#/folder-view";
+  const ROUTE = "/plugin/folder-view";
   const NAV_ID = "stash-folder-view-nav";
   const LAUNCHER_ID = "stash-folder-view-launcher";
   const APP_ID = "stash-folder-view-root";
@@ -25,6 +25,8 @@
     error: "",
     status: "",
     loaded: { scenes: false, galleries: false, images: false },
+    routeRegistered: false,
+    routeContainer: null,
   };
 
   function el(tag, className, text) {
@@ -49,7 +51,7 @@
   }
 
   function isRoute() {
-    return window.location.hash === HASH_ROUTE;
+    return window.location.pathname.replace(/\/$/, "") === ROUTE;
   }
 
   function notifyRouteChange() {
@@ -71,9 +73,9 @@
 
   function navigate(event) {
     if (event) event.preventDefault();
-    window.history.pushState({}, "", `/${HASH_ROUTE}`);
+    window.history.pushState({}, "", ROUTE);
+    window.dispatchEvent(new PopStateEvent("popstate"));
     notifyRouteChange();
-    render();
   }
 
   function findNav() {
@@ -127,16 +129,9 @@
       app = el("main", "stash-fv-app");
       app.id = APP_ID;
       app.hidden = true;
-      const mount = document.querySelector(".main, main, .content, .container-fluid") || document.body;
-      mount.appendChild(app);
+      document.body.appendChild(app);
     }
     return app;
-  }
-
-  function setHostActive(app, active) {
-    const host = app && app.parentElement;
-    if (!host || host === document.body) return;
-    host.classList.toggle("stash-fv-host-active", active);
   }
 
   async function graphql(query, variables) {
@@ -463,6 +458,7 @@
   function openItem(item) {
     const config = TYPES[state.type];
     window.history.pushState({}, "", `${config.route}${item.id}${config.query || ""}`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
     notifyRouteChange();
   }
 
@@ -592,16 +588,22 @@
 
   function render() {
     try {
+      if (state.routeContainer) {
+        renderInto(state.routeContainer);
+        return;
+      }
       const app = getApp();
       const navButton = document.querySelector(`#${NAV_ID} .stash-fv-nav-button`);
       if (navButton) navButton.classList.toggle("active", isRoute());
+      if (isRoute() && state.routeRegistered) {
+        app.hidden = true;
+        return;
+      }
       if (!isRoute()) {
-        setHostActive(app, false);
         app.hidden = true;
         return;
       }
       app.hidden = false;
-      setHostActive(app, true);
       clear(app);
       const shell = el("section", "stash-fv-shell");
       const header = el("div", "stash-fv-titlebar");
@@ -627,6 +629,7 @@
   }
 
   function install() {
+    registerPluginRoute();
     patchHistory();
     addNav();
     window.setTimeout(() => {
@@ -639,11 +642,54 @@
   const observer = new MutationObserver(addNav);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("popstate", render);
-  window.addEventListener("hashchange", render);
   window.addEventListener("stash-folder-view-route", render);
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", install, { once: true });
   } else {
     install();
+  }
+
+  function renderInto(container) {
+    container.className = "stash-fv-app";
+    clear(container);
+    const shell = el("section", "stash-fv-shell");
+    const header = el("div", "stash-fv-titlebar");
+    header.appendChild(el("h1", "", "Folder View"));
+    header.appendChild(el("p", "", "Browse Stash objects by your real library folders."));
+    shell.appendChild(header);
+    renderToolbar(shell);
+    if (state.error) shell.appendChild(el("div", "stash-fv-error", state.error));
+    if (state.status) shell.appendChild(el("div", "stash-fv-status", state.status));
+    if (state.loading) {
+      shell.appendChild(el("div", "stash-fv-empty", "Loading folder tree..."));
+    } else {
+      const content = el("div", "stash-fv-content");
+      renderTree(content);
+      renderItems(content);
+      shell.appendChild(content);
+    }
+    container.appendChild(shell);
+    if (!state.loaded[state.type] && !state.loading && !state.error) loadCurrentType(false);
+  }
+
+  function registerPluginRoute() {
+    const api = window.PluginApi;
+    if (!api || !api.React || !api.register || !api.register.route || window.__stashFolderViewRouteRegistered) return;
+    window.__stashFolderViewRouteRegistered = true;
+    state.routeRegistered = true;
+    const React = api.React;
+    function FolderViewPage() {
+      const ref = React.useRef(null);
+      React.useEffect(() => {
+        if (!ref.current) return undefined;
+        state.routeContainer = ref.current;
+        renderInto(ref.current);
+        return () => {
+          if (state.routeContainer === ref.current) state.routeContainer = null;
+        };
+      });
+      return React.createElement("div", { id: APP_ID, ref });
+    }
+    api.register.route(ROUTE, FolderViewPage);
   }
 })();

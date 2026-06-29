@@ -71,12 +71,12 @@
 
 .stash-fv-tabs {
   display: inline-grid;
-  grid-template-columns: repeat(2, minmax(5.5rem, 1fr));
+  grid-template-columns: repeat(3, minmax(5.5rem, 1fr));
 }
 
 .stash-fv-tab,
 .stash-fv-refresh,
-.stash-fv-folder,
+.stash-fv-tree-folder,
 .stash-fv-card {
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: inherit;
@@ -100,7 +100,7 @@
 }
 
 .stash-fv-tab[aria-pressed="true"],
-.stash-fv-folder[aria-pressed="true"],
+.stash-fv-tree-folder[aria-pressed="true"],
 .stash-fv-nav-button.active {
   background: #516171;
   border-color: rgba(255, 255, 255, 0.22);
@@ -123,26 +123,55 @@
 .stash-fv-content {
   display: grid;
   gap: 1rem;
-  grid-template-columns: minmax(15rem, 21rem) minmax(0, 1fr);
+  grid-template-columns: minmax(18rem, 26rem) minmax(0, 1fr);
 }
 
-.stash-fv-folders {
+.stash-fv-tree {
   align-content: start;
   display: grid;
-  gap: 0.35rem;
+  gap: 0.2rem;
   max-height: calc(100vh - 13rem);
   overflow: auto;
   padding-right: 0.25rem;
 }
 
-.stash-fv-folder {
+.stash-fv-tree-row {
+  align-items: center;
+  display: grid;
+  gap: 0.25rem;
+  grid-template-columns: 1.7rem minmax(0, 1fr);
+  padding-left: calc(var(--depth, 0) * 1rem);
+}
+
+.stash-fv-tree-toggle {
+  align-items: center;
+  background: #1c1f25;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  height: 1.6rem;
+  justify-content: center;
+  width: 1.6rem;
+}
+
+.stash-fv-tree-toggle:disabled {
+  cursor: default;
+  opacity: 0.25;
+}
+
+.stash-fv-tree-folder {
   align-items: center;
   background: #252932;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 6px;
+  color: inherit;
+  cursor: pointer;
   display: grid;
   gap: 0.5rem;
   grid-template-columns: minmax(0, 1fr) auto;
-  min-height: 2.4rem;
+  min-height: 2.2rem;
   padding: 0.35rem 0.55rem;
   text-align: left;
 }
@@ -180,6 +209,11 @@
   overflow-wrap: anywhere;
 }
 
+.stash-fv-subtle {
+  color: #8f9aaa;
+  font-size: 0.85rem;
+}
+
 .stash-fv-grid {
   display: grid;
   gap: 0.8rem;
@@ -198,7 +232,7 @@
 }
 
 .stash-fv-card:hover,
-.stash-fv-folder:hover,
+.stash-fv-tree-folder:hover,
 .stash-fv-refresh:hover,
 .stash-fv-tab:hover {
   border-color: rgba(255, 255, 255, 0.32);
@@ -239,6 +273,34 @@
   font-size: 0.85rem;
 }
 
+.stash-fv-card-path {
+  color: #8f9aaa;
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stash-fv-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.stash-fv-chip {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  color: #d6dce5;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  max-width: 100%;
+  overflow: hidden;
+  padding: 0.12rem 0.4rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .stash-fv-error,
 .stash-fv-status,
 .stash-fv-empty {
@@ -271,7 +333,7 @@
     grid-template-columns: 1fr;
   }
 
-  .stash-fv-folders {
+  .stash-fv-tree {
     grid-auto-flow: column;
     grid-auto-columns: minmax(12rem, 70%);
     max-height: none;

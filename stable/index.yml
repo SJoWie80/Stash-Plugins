@@ -1,12 +1,12 @@
 - id: chaturbate
   name: Chaturbate
-  version: 1.3.4
-  date: 2026-06-29 13:05:00
-  path: packages/chaturbate-v1.3.4.zip
-  sha256: 52baaf047d6817c9b0f625b94db97556625dfa18e08391e63e13cb3b2f312cdc
+  version: 1.3.5
+  date: 2026-06-29 23:15:00
+  path: packages/chaturbate-v1.3.5.zip
+  sha256: ce5019bcdb839eb77f67c1a54162694432f1d368c100325ebc547b5e632ce113
   metadata:
     description: Browse and watch Chaturbate cams inside Stash.
-    url: https://chaturbate.com/
+    url: https://github.com/SJoWie80/Stash-Plugins
 
 - id: folder-view
   name: Folder View

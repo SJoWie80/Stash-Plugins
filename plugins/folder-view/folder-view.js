@@ -2,6 +2,7 @@
   "use strict";
 
   const ROUTE = "/plugin/folder-view";
+  const HASH_ROUTE = "#/folder-view";
   const NAV_ID = "stash-folder-view-nav";
   const LAUNCHER_ID = "stash-folder-view-launcher";
   const APP_ID = "stash-folder-view-root";
@@ -45,7 +46,7 @@
   }
 
   function isRoute() {
-    return window.location.pathname.replace(/\/$/, "") === ROUTE;
+    return window.location.hash === HASH_ROUTE || window.location.pathname.replace(/\/$/, "") === ROUTE;
   }
 
   function notifyRouteChange() {
@@ -89,7 +90,7 @@
     if (event) {
       event.preventDefault();
     }
-    window.history.pushState({}, "", ROUTE);
+    window.history.pushState({}, "", `/${HASH_ROUTE}`);
     notifyRouteChange();
     render();
   }
@@ -558,6 +559,7 @@
   const observer = new MutationObserver(addNav);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("popstate", render);
+  window.addEventListener("hashchange", render);
   window.addEventListener("stash-folder-view-route", render);
 
   if (document.readyState === "loading") {

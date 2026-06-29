@@ -30,10 +30,12 @@
 .stash-fv-app {
   background: var(--body-bg, #202124);
   color: var(--body-color, #f3f4f6);
-  min-height: calc(100vh - 56px);
+  inset: 0;
+  min-height: 100vh;
+  overflow: auto;
   padding: 1.25rem;
-  position: relative;
-  z-index: 1;
+  position: fixed;
+  z-index: 9998;
 }
 
 .stash-fv-shell {
@@ -238,11 +240,17 @@
 }
 
 .stash-fv-error,
+.stash-fv-status,
 .stash-fv-empty {
   background: #2d3138;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
   padding: 1rem;
+}
+
+.stash-fv-status {
+  color: #d6dce5;
+  margin-bottom: 1rem;
 }
 
 .stash-fv-error {

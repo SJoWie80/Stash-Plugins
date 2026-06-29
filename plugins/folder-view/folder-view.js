@@ -5,7 +5,8 @@
   const NAV_ID = "stash-folder-view-nav";
   const LAUNCHER_ID = "stash-folder-view-launcher";
   const APP_ID = "stash-folder-view-root";
-  const PAGE_SIZE = 250;
+  const PAGE_SIZE = 200;
+  const MAX_PAGES = 50;
 
   const state = {
     type: "scenes",
@@ -15,6 +16,11 @@
     search: "",
     loading: false,
     error: "",
+    status: "",
+    stats: {
+      scenes: "",
+      galleries: "",
+    },
     loaded: {
       scenes: false,
       galleries: false,
@@ -160,6 +166,28 @@
     return payload.data;
   }
 
+  async function loadPaged(loader, resultKey, listKey) {
+    const allItems = [];
+    let total = 0;
+
+    for (let page = 1; page <= MAX_PAGES; page += 1) {
+      state.status = `Loading ${state.type} page ${page}...`;
+      render();
+
+      const result = await loader(page);
+      const data = result && result[resultKey];
+      const items = (data && data[listKey]) || [];
+      total = data && typeof data.count === "number" ? data.count : allItems.length + items.length;
+      allItems.push(...items);
+
+      if (!items.length || allItems.length >= total || items.length < PAGE_SIZE) {
+        break;
+      }
+    }
+
+    return { items: allItems, total };
+  }
+
   function folderFromFile(file) {
     const parent = file && file.parent_folder;
     if (parent && parent.path) {
@@ -247,15 +275,19 @@
         }
       }
     `;
-    const data = await graphql(query, {
-      filter: {
-        page: 1,
-        per_page: PAGE_SIZE,
-        sort: "path",
-        direction: "ASC",
-      },
-    });
-    return data.findScenes.scenes || [];
+    const result = await loadPaged(
+      (page) =>
+        graphql(query, {
+          filter: {
+            page,
+            per_page: PAGE_SIZE,
+          },
+        }),
+      "findScenes",
+      "scenes"
+    );
+    state.stats.scenes = `${result.items.length} scenes loaded from ${result.total} found`;
+    return result.items;
   }
 
   async function loadGalleries() {
@@ -279,15 +311,19 @@
         }
       }
     `;
-    const data = await graphql(query, {
-      filter: {
-        page: 1,
-        per_page: PAGE_SIZE,
-        sort: "path",
-        direction: "ASC",
-      },
-    });
-    return data.findGalleries.galleries || [];
+    const result = await loadPaged(
+      (page) =>
+        graphql(query, {
+          filter: {
+            page,
+            per_page: PAGE_SIZE,
+          },
+        }),
+      "findGalleries",
+      "galleries"
+    );
+    state.stats.galleries = `${result.items.length} galleries loaded from ${result.total} found`;
+    return result.items;
   }
 
   async function loadCurrentType(force) {
@@ -297,14 +333,17 @@
 
     state.loading = true;
     state.error = "";
+    state.status = `Loading ${state.type}...`;
     render();
 
     try {
       state.items = state.type === "scenes" ? await loadScenes() : await loadGalleries();
       state.loaded[state.type] = true;
       refreshFolders();
+      state.status = `${state.items.length} ${state.type} grouped into ${state.folders.length} folders`;
     } catch (error) {
       state.error = error.message || String(error);
+      state.status = "";
       state.items = [];
       state.folders = [];
       state.selectedFolder = "";
@@ -481,6 +520,11 @@
 
       if (state.error) {
         shell.appendChild(el("div", "stash-fv-error", state.error));
+      }
+
+      const status = state.status || state.stats[state.type] || "";
+      if (status) {
+        shell.appendChild(el("div", "stash-fv-status", status));
       }
 
       if (state.loading) {

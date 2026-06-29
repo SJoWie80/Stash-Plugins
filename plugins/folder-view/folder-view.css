@@ -4,8 +4,21 @@
 
 .stash-fv-nav-button {
   align-items: center;
+  color: inherit;
   display: inline-flex;
-  gap: 0.35rem;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.stash-fv-nav-button:hover,
+.stash-fv-nav-button:focus {
+  color: #fff;
+  text-decoration: none;
+}
+
+.stash-fv-nav-icon {
+  font-size: 0.95rem;
+  opacity: 0.88;
 }
 
 .stash-fv-launcher {

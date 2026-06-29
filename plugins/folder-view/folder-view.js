@@ -98,10 +98,13 @@
       if (!nav) return;
       const wrap = el("div", "stash-fv-nav-wrap");
       wrap.id = NAV_ID;
-      const button = el("button", "btn btn-secondary stash-fv-nav-button", "Folder View");
-      button.type = "button";
-      button.addEventListener("click", navigate);
-      wrap.appendChild(button);
+      const link = el("a", "nav-link stash-fv-nav-button");
+      link.href = ROUTE;
+      link.setAttribute("aria-label", "Folder View");
+      link.appendChild(el("span", "fa fa-folder fas fa-folder stash-fv-nav-icon"));
+      link.appendChild(el("span", "stash-fv-nav-text", "Folder View"));
+      link.addEventListener("click", navigate);
+      wrap.appendChild(link);
       nav.appendChild(wrap);
       removeLauncher();
     } catch (error) {
@@ -297,7 +300,11 @@
 
   function itemTitle(item) {
     const file = firstFile(item);
-    return item.title || (file && file.basename) || `Untitled ${TYPES[state.type].label.slice(0, -1).toLowerCase()}`;
+    const title = item.title || "";
+    if (state.type === "galleries" && (!title.trim() || /^untitled\s+(gallery|galerie)$/i.test(title.trim()))) {
+      return basename(folderPath(item)) || (file && file.basename) || "Gallery";
+    }
+    return title || (file && file.basename) || basename(folderPath(item)) || `Untitled ${TYPES[state.type].label.slice(0, -1).toLowerCase()}`;
   }
 
   function relationNames(list) {

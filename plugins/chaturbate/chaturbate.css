@@ -1,56 +1,31 @@
 .stash-cb-nav-wrap {
   align-items: center;
-  display: flex;
-  margin: 0 4px;
+  display: inline-flex;
 }
 
 .stash-cb-nav-button {
   align-items: center;
-  background: rgba(8, 8, 8, 0.9);
-  border: 1px solid rgba(188, 176, 145, 0.78);
-  border-radius: 4px;
-  color: var(--light, #f8f9fa);
+  color: inherit;
   display: inline-flex;
-  font-size: 0.95rem;
-  font-weight: 600;
-  gap: 8px;
-  height: 38px;
-  line-height: 1;
-  padding: 0 14px;
+  gap: 0.4rem;
   white-space: nowrap;
 }
 
 .stash-cb-nav-button:hover,
 .stash-cb-nav-button:focus {
-  background: rgba(22, 22, 22, 0.96);
-  border-color: rgba(244, 107, 147, 0.95);
   color: #fff;
+  text-decoration: none;
 }
 
 .stash-cb-nav-button.active,
 .stash-cb-nav-button[aria-current="page"] {
-  border-color: #f46b93;
-  box-shadow: 0 0 0 2px rgba(244, 107, 147, 0.25);
   color: #fff;
 }
 
 .stash-cb-nav-icon {
-  background: #f46b93;
-  border-radius: 999px;
-  display: inline-block;
-  height: 11px;
-  position: relative;
-  width: 11px;
-}
-
-.stash-cb-nav-icon::after {
-  border-bottom: 3px solid transparent;
-  border-left: 5px solid #111;
-  border-top: 3px solid transparent;
-  content: "";
-  left: 4px;
-  position: absolute;
-  top: 2px;
+  color: #f46b93;
+  font-size: 0.95rem;
+  opacity: 0.95;
 }
 
 .stash-cb-nav-text {

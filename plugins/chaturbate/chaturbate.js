@@ -140,13 +140,13 @@
 
       const wrap = el("div", "stash-cb-nav-wrap");
       wrap.id = NAV_ID;
-      const button = el("button", "btn btn-secondary stash-cb-nav-button");
-      button.type = "button";
-      button.setAttribute("aria-label", "Chaturbate");
-      button.appendChild(el("span", "stash-cb-nav-icon"));
-      button.appendChild(el("span", "stash-cb-nav-text", "Chaturbate"));
-      button.addEventListener("click", navigate);
-      wrap.appendChild(button);
+      const link = el("a", "nav-link stash-cb-nav-button");
+      link.href = ROUTE;
+      link.setAttribute("aria-label", "Chaturbate");
+      link.appendChild(el("span", "fa fa-video-camera fas fa-video stash-cb-nav-icon"));
+      link.appendChild(el("span", "stash-cb-nav-text", "Chaturbate"));
+      link.addEventListener("click", navigate);
+      wrap.appendChild(link);
       nav.appendChild(wrap);
       log("navbar button added");
     } catch (error) {

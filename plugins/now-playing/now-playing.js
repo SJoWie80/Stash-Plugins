@@ -360,6 +360,12 @@
     return Math.min(100, Math.max(0, (Number(session.currentTime || 0) / duration) * 100));
   }
 
+  function timeLabel(session) {
+    const duration = Number(session.duration) || 0;
+    const currentTime = formatTime(session.currentTime);
+    return duration > 0 ? `${currentTime} / ${formatTime(duration)}` : `${currentTime} elapsed`;
+  }
+
   function openScene(session) {
     if (!session.sceneId) return;
     window.history.pushState({}, "", `/scenes/${session.sceneId}?qsort=date&qfp=1&continue=false`);
@@ -395,7 +401,7 @@
     bar.style.width = `${progressPercent(session)}%`;
     progress.appendChild(bar);
 
-    const time = el("span", "stash-np-time", `${formatTime(session.currentTime)} / ${formatTime(session.duration)}`);
+    const time = el("span", "stash-np-time", timeLabel(session));
     body.append(title, meta, status, progress, time);
     card.appendChild(body);
     return card;

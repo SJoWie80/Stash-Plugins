@@ -6,6 +6,7 @@
   const APP_ID = "stash-now-playing-root";
   const HEARTBEAT_MS = 8000;
   const REFRESH_MS = 5000;
+  const LOG_POLL_MS = 10000;
 
   const state = {
     pluginId: "",
@@ -15,8 +16,11 @@
     error: "",
     loading: false,
     currentScene: null,
+    sceneCache: {},
     lastReportKey: "",
     lastReportAt: 0,
+    logPollingAvailable: true,
+    lastLogSignature: "",
   };
 
   function el(tag, className, text) {
@@ -115,7 +119,7 @@
   }
 
   async function loadScene(sceneId) {
-    if (state.currentScene && state.currentScene.id === sceneId) return state.currentScene;
+    if (state.sceneCache[sceneId]) return state.sceneCache[sceneId];
     const data = await graphql(
       `query NowPlayingScene($id: ID!) {
         findScene(id: $id) {
@@ -129,8 +133,81 @@
       }`,
       { id: sceneId }
     );
-    state.currentScene = data && data.findScene;
-    return state.currentScene;
+    state.sceneCache[sceneId] = data && data.findScene;
+    state.currentScene = state.sceneCache[sceneId];
+    return state.sceneCache[sceneId];
+  }
+
+  function titleForScene(scene, sceneId) {
+    const firstFile = scene && scene.files && scene.files[0];
+    return (scene && scene.title) || (firstFile && firstFile.basename) || `Scene ${sceneId}`;
+  }
+
+  async function reportServerScene(sceneId, resumeTime, playDelta) {
+    const scene = await loadScene(sceneId);
+    if (!scene) return;
+    const firstFile = scene.files && scene.files[0];
+    await pluginOperation({
+      action: "report",
+      clientId: `server-scene-${sceneId}`,
+      clientName: "Stash server",
+      source: "server-log",
+      sceneId,
+      title: titleForScene(scene, sceneId),
+      studio: scene.studio && scene.studio.name,
+      performers: relationNames(scene.performers),
+      cover: scene.paths && scene.paths.screenshot,
+      path: firstFile && firstFile.path,
+      url: `/scenes/${sceneId}?qsort=date&qfp=1&continue=false`,
+      currentTime: Number(resumeTime) || 0,
+      duration: 0,
+      paused: false,
+      userAgent: `play_duration +${playDelta || ""}`,
+    });
+  }
+
+  function logText(entry) {
+    if (!entry) return "";
+    return [entry.message, entry.fields, entry.args, entry.text, entry.raw]
+      .map((value) => (typeof value === "string" ? value : value ? JSON.stringify(value) : ""))
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  function parsePlaybackLog(text) {
+    if (!text || !text.includes("UPDATE `scenes`") || !text.includes("play_duration")) return null;
+    const numbersMatch = text.match(/\[\[\s*([0-9.]+)\s+([0-9.]+)\s+([0-9]+)\s*\]\]/);
+    if (numbersMatch) {
+      return { playDelta: numbersMatch[1], resumeTime: numbersMatch[2], sceneId: numbersMatch[3] };
+    }
+    const tailMatch = text.match(/([0-9]+)\s*\]\]?$/);
+    return tailMatch ? { playDelta: "", resumeTime: 0, sceneId: tailMatch[1] } : null;
+  }
+
+  async function pollPlaybackLogs() {
+    if (!state.logPollingAvailable) return;
+    try {
+      let data;
+      try {
+        data = await graphql("query NowPlayingLogs { logs { time level message fields } }", {});
+      } catch (error) {
+        data = await graphql("query NowPlayingLogsBasic { logs { time level message } }", {});
+      }
+      const entries = ((data && data.logs) || []).slice(-80);
+      const parsed = entries
+        .map((entry) => parsePlaybackLog(logText(entry)))
+        .filter((entry) => entry && entry.sceneId);
+      if (!parsed.length) return;
+      const latest = parsed[parsed.length - 1];
+      const signature = `${latest.sceneId}:${latest.resumeTime}`;
+      if (signature === state.lastLogSignature) return;
+      state.lastLogSignature = signature;
+      await reportServerScene(latest.sceneId, latest.resumeTime, latest.playDelta);
+      if (state.routeContainer || isRoute()) loadSessions();
+    } catch (error) {
+      state.logPollingAvailable = false;
+      console.warn("[Now Playing] log polling unavailable", error);
+    }
   }
 
   async function sendHeartbeat(force) {
@@ -152,8 +229,9 @@
       action: "report",
       clientId: clientId(),
       clientName: clientName(),
+      source: "browser",
       sceneId,
-      title: scene.title || (firstFile && firstFile.basename) || `Scene ${sceneId}`,
+      title: titleForScene(scene, sceneId),
       studio: scene.studio && scene.studio.name,
       performers: relationNames(scene.performers),
       cover: scene.paths && scene.paths.screenshot,
@@ -257,7 +335,8 @@
     meta.textContent = [session.studio, performers].filter(Boolean).join(" · ") || session.path || "";
 
     const status = el("span", "stash-np-status");
-    status.textContent = session.active ? `Playing on ${session.clientName || "Browser"}` : `Paused/recent · ${session.ageSeconds || 0}s ago`;
+    const source = session.source === "server-log" ? "detected by Stash activity" : `on ${session.clientName || "Browser"}`;
+    status.textContent = session.active ? `Playing ${source}` : `Paused/recent - ${session.ageSeconds || 0}s ago`;
 
     const progress = el("span", "stash-np-progress");
     const bar = el("span", "stash-np-progress-bar");
@@ -287,7 +366,11 @@
 
     const active = state.sessions.filter((session) => session.active);
     const recent = state.sessions.filter((session) => !session.active);
-    const summary = el("div", "stash-np-summary", `${active.length} active · ${recent.length} recent`);
+    const summary = el(
+      "div",
+      "stash-np-summary",
+      `${active.length} active - ${recent.length} recent${state.logPollingAvailable ? " - server log detection on" : ""}`
+    );
     shell.appendChild(summary);
 
     const list = el("div", "stash-np-list");
@@ -336,9 +419,11 @@
     window.setTimeout(addNav, 1500);
     window.setInterval(monitorPlayback, HEARTBEAT_MS);
     window.setInterval(loadSessions, REFRESH_MS);
+    window.setInterval(pollPlaybackLogs, LOG_POLL_MS);
     document.addEventListener("play", () => sendHeartbeat(true).catch(() => {}), true);
     document.addEventListener("pause", () => sendHeartbeat(true).catch(() => {}), true);
     monitorPlayback();
+    pollPlaybackLogs();
   }
 
   const observer = new MutationObserver(addNav);

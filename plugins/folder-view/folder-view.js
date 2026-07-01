@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const ROUTE = "/plugin/folder-view";
+  const ROUTE = "/folder-view";
   const NAV_ID = "stash-folder-view-nav";
   const LAUNCHER_ID = "stash-folder-view-launcher";
   const APP_ID = "stash-folder-view-root";

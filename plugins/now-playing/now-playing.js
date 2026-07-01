@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const ROUTE = "/plugin/now-playing";
+  const ROUTE = "/now-playing";
   const NAV_ID = "stash-now-playing-nav";
   const APP_ID = "stash-now-playing-root";
   const HEARTBEAT_MS = 8000;

@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  const ROUTE = "/plugin/chaturbate";
+  const ROUTE = "/chaturbate";
   const NAV_ID = "stash-chaturbate-nav";
   const APP_ID = "stash-chaturbate-root";
   const HLS_JS = "https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js";

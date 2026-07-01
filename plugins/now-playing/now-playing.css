@@ -1,0 +1,168 @@
+.stash-np-nav-wrap {
+  display: inline-flex;
+}
+
+.stash-np-nav-button {
+  align-items: center;
+  color: inherit;
+  display: inline-flex;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.stash-np-nav-button:hover,
+.stash-np-nav-button:focus,
+.stash-np-nav-button.active {
+  color: #fff;
+  text-decoration: none;
+}
+
+.stash-np-nav-icon {
+  color: #6fd08c;
+  font-size: 0.95rem;
+  opacity: 0.95;
+}
+
+.stash-np-app {
+  color: var(--body-color, #f3f4f6);
+  min-height: calc(100vh - 56px);
+  padding: 1.25rem;
+}
+
+.stash-np-shell {
+  margin: 0 auto;
+  max-width: 1500px;
+}
+
+.stash-np-titlebar {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.stash-np-titlebar h1 {
+  font-size: 1.6rem;
+  margin: 0;
+}
+
+.stash-np-summary,
+.stash-np-empty,
+.stash-np-error {
+  background: #252932;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+}
+
+.stash-np-error {
+  border-color: rgba(255, 93, 93, 0.45);
+  color: #ffb3b3;
+}
+
+.stash-np-list {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: repeat(auto-fill, minmax(24rem, 1fr));
+}
+
+.stash-np-session {
+  background: #1d2129;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: 12rem minmax(0, 1fr);
+  min-height: 8rem;
+  overflow: hidden;
+  padding: 0;
+  text-align: left;
+}
+
+.stash-np-session.is-active {
+  border-color: rgba(111, 208, 140, 0.65);
+}
+
+.stash-np-session:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.stash-np-thumb {
+  aspect-ratio: 16 / 9;
+  background: #11141a;
+  height: 100%;
+  object-fit: cover;
+  width: 12rem;
+}
+
+.stash-np-thumb-empty {
+  align-items: center;
+  color: #9aa5b3;
+  display: flex;
+  justify-content: center;
+}
+
+.stash-np-body {
+  align-content: center;
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0.8rem 0.8rem 0.8rem 0;
+}
+
+.stash-np-title {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stash-np-meta,
+.stash-np-status,
+.stash-np-time {
+  color: #aeb6c2;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stash-np-session.is-active .stash-np-status {
+  color: #9de6b1;
+}
+
+.stash-np-progress {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  height: 0.45rem;
+  overflow: hidden;
+}
+
+.stash-np-progress-bar {
+  background: #6fd08c;
+  display: block;
+  height: 100%;
+}
+
+@media (max-width: 720px) {
+  .stash-np-app {
+    padding: 0.8rem;
+  }
+
+  .stash-np-list {
+    grid-template-columns: 1fr;
+  }
+
+  .stash-np-session {
+    grid-template-columns: 1fr;
+  }
+
+  .stash-np-thumb {
+    height: auto;
+    width: 100%;
+  }
+}

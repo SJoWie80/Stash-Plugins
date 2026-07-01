@@ -1,0 +1,16 @@
+name: Now Playing
+description: Shows active Stash web playback sessions reported by connected browsers.
+version: 1.0.0
+url: https://github.com/SJoWie80/Stash-Plugins
+exec:
+  - python
+  - "{pluginDir}/now_playing_backend.py"
+interface: raw
+tasks:
+  - name: state
+    description: Store and read Now Playing heartbeat state.
+ui:
+  javascript:
+    - now-playing.js
+  css:
+    - now-playing.css

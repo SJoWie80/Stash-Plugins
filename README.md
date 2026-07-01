@@ -16,6 +16,7 @@ Then open `Settings > Plugins`, reload plugin sources, and install the plugins y
 
 - `Chaturbate` - browse and watch Chaturbate cams inside Stash.
 - `Folder View` - browse scenes and galleries grouped by filesystem folder.
+- `Now Playing` - show active Stash web playback sessions reported by connected browsers.
 
 ## Files
 

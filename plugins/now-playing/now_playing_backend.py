@@ -65,6 +65,7 @@ def report(args):
     session = {
         "clientId": client_id,
         "clientName": arg_value(args, "clientName", "Browser"),
+        "source": arg_value(args, "source", "browser"),
         "sceneId": str(arg_value(args, "sceneId", "") or ""),
         "title": arg_value(args, "title", ""),
         "studio": arg_value(args, "studio", ""),

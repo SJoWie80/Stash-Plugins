@@ -7,6 +7,9 @@
   const HEARTBEAT_MS = 8000;
   const REFRESH_MS = 5000;
   const LOG_POLL_MS = 10000;
+  const ACTIVITY_POLL_MS = 10000;
+  const ACTIVITY_PAGE_SIZE = 250;
+  const ACTIVITY_MAX_PAGES = 40;
 
   const state = {
     pluginId: "",
@@ -21,6 +24,8 @@
     lastReportAt: 0,
     logPollingAvailable: true,
     lastLogSignature: "",
+    activitySeen: {},
+    activityPollingAvailable: true,
   };
 
   function el(tag, className, text) {
@@ -151,7 +156,7 @@
       action: "report",
       clientId: `server-scene-${sceneId}`,
       clientName: "Stash server",
-      source: "server-log",
+      source: "server-activity",
       sceneId,
       title: titleForScene(scene, sceneId),
       studio: scene.studio && scene.studio.name,
@@ -164,6 +169,53 @@
       paused: false,
       userAgent: `play_duration +${playDelta || ""}`,
     });
+  }
+
+  async function pollSceneActivity() {
+    if (!state.activityPollingAvailable) return;
+    try {
+      let reported = false;
+      for (let page = 1; page <= ACTIVITY_MAX_PAGES; page += 1) {
+        const data = await graphql(
+          `query NowPlayingSceneActivity($filter: FindFilterType) {
+            findScenes(filter: $filter) {
+              count
+              scenes {
+                id
+                title
+                resume_time
+                play_duration
+                paths { screenshot }
+                files { path basename }
+                studio { name }
+                performers { name }
+              }
+            }
+          }`,
+          { filter: { page, per_page: ACTIVITY_PAGE_SIZE } }
+        );
+        const result = (data || {}).findScenes || {};
+        const scenes = result.scenes || [];
+        for (const scene of scenes) {
+          const seen = state.activitySeen[scene.id];
+          const playDuration = Number(scene.play_duration || 0);
+          const resumeTime = Number(scene.resume_time || 0);
+          const durationIncreased = seen && playDuration > Number(seen.playDuration || 0) + 0.25;
+          const resumeMoved = seen && Math.abs(resumeTime - Number(seen.resumeTime || 0)) > 0.25;
+          state.activitySeen[scene.id] = { playDuration, resumeTime };
+          if (!durationIncreased && !resumeMoved) continue;
+          state.sceneCache[scene.id] = scene;
+          await reportServerScene(scene.id, resumeTime, playDuration - Number(seen.playDuration || 0));
+          reported = true;
+        }
+        const total = Number(result.count || 0);
+        if (!scenes.length || page * ACTIVITY_PAGE_SIZE >= total) break;
+      }
+      if (reported && (state.routeContainer || isRoute())) loadSessions();
+    } catch (error) {
+      state.activityPollingAvailable = false;
+      console.warn("[Now Playing] scene activity polling unavailable", error);
+    }
   }
 
   function logText(entry) {
@@ -335,7 +387,7 @@
     meta.textContent = [session.studio, performers].filter(Boolean).join(" · ") || session.path || "";
 
     const status = el("span", "stash-np-status");
-    const source = session.source === "server-log" ? "detected by Stash activity" : `on ${session.clientName || "Browser"}`;
+    const source = session.source === "server-activity" || session.source === "server-log" ? "detected by Stash activity" : `on ${session.clientName || "Browser"}`;
     status.textContent = session.active ? `Playing ${source}` : `Paused/recent - ${session.ageSeconds || 0}s ago`;
 
     const progress = el("span", "stash-np-progress");
@@ -369,7 +421,7 @@
     const summary = el(
       "div",
       "stash-np-summary",
-      `${active.length} active - ${recent.length} recent${state.logPollingAvailable ? " - server log detection on" : ""}`
+      `${active.length} active - ${recent.length} recent${state.activityPollingAvailable ? " - server activity detection on" : ""}`
     );
     shell.appendChild(summary);
 
@@ -419,10 +471,12 @@
     window.setTimeout(addNav, 1500);
     window.setInterval(monitorPlayback, HEARTBEAT_MS);
     window.setInterval(loadSessions, REFRESH_MS);
+    window.setInterval(pollSceneActivity, ACTIVITY_POLL_MS);
     window.setInterval(pollPlaybackLogs, LOG_POLL_MS);
     document.addEventListener("play", () => sendHeartbeat(true).catch(() => {}), true);
     document.addEventListener("pause", () => sendHeartbeat(true).catch(() => {}), true);
     monitorPlayback();
+    pollSceneActivity();
     pollPlaybackLogs();
   }
 

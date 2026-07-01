@@ -1,6 +1,6 @@
 name: Now Playing
-description: Shows active Stash web playback sessions reported by connected browsers.
-version: 1.1.0
+description: Shows active Stash playback from browser sessions and server-side scene activity.
+version: 1.2.0
 url: https://github.com/SJoWie80/Stash-Plugins
 exec:
   - python

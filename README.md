@@ -2,7 +2,7 @@
 
 This repository contains Stash plugin packages maintained by SJoWie80.
 
-## Add to Stash
+## Stash Plugin Source
 
 Add this plugin source URL in Stash:
 
@@ -18,8 +18,15 @@ Then open `Settings > Plugins`, reload plugin sources, and install the plugins y
 - `Folder View` - browse scenes and galleries grouped by filesystem folder.
 - `Now Playing` - show active Stash web playback sessions reported by connected browsers.
 
+## Included Bridges
+
+- `PLAY'A VR Bridge` - a companion Docker service that exposes a PLAY'A API v2 compatible website backed by Stash.
+
+The PLAY'A bridge is not installed through the Stash plugin source. It runs as a separate container because PLAY'A connects to its own website/API endpoint. See [bridges/playa-vr-stash](bridges/playa-vr-stash/README.md).
+
 ## Files
 
 - `plugins/` contains the plugin source files.
+- `bridges/` contains companion services that integrate Stash with external apps.
 - `stable/index.yml` is the Stash plugin source index.
 - `stable/packages/` contains the installable plugin zip packages referenced by the index.

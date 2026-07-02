@@ -8,7 +8,10 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from io import BytesIO
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+from PIL import Image, ImageOps
 
 
 STASH_URL = os.environ.get("STASH_URL", "http://127.0.0.1:9999").rstrip("/")
@@ -23,8 +26,8 @@ SCAN_MAX_PAGES = int(os.environ.get("PLAYA_SCAN_MAX_PAGES", "200"))
 DEFAULT_PROJECTION = os.environ.get("PLAYA_DEFAULT_PROJECTION", "180").upper()
 DEFAULT_STEREO = os.environ.get("PLAYA_DEFAULT_STEREO", "LR").upper()
 SHOW_VIDEO_STATUS = os.environ.get("PLAYA_SHOW_VIDEO_STATUS", "false").lower() in {"1", "true", "yes", "on"}
-SHOW_STUDIO_IMAGES = os.environ.get("PLAYA_SHOW_STUDIO_IMAGES", "false").lower() in {"1", "true", "yes", "on"}
 SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+IMAGE_TILE_SIZE = int(os.environ.get("PLAYA_IMAGE_TILE_SIZE", "512"))
 
 
 def log(message):
@@ -81,14 +84,15 @@ def absolute_url(value):
     return with_api_key(f"{PUBLIC_STASH_URL}/{value.lstrip('/')}")
 
 
-def preview_url(value, enabled=True):
-    if not enabled or not value:
+def preview_url(value, bridge_base_url):
+    if not value:
         return None
     parsed = urllib.parse.urlparse(value)
     extension = os.path.splitext(parsed.path.lower())[1]
     if extension and extension not in SUPPORTED_IMAGE_EXTENSIONS:
         return None
-    return absolute_url(value)
+    source = absolute_url(value)
+    return f"{bridge_base_url}/api/playa/v2/image?url={urllib.parse.quote(source, safe='')}"
 
 
 def with_api_key(url):
@@ -410,7 +414,7 @@ def get_scene_for_stream(scene_id):
     return data.get("findScene")
 
 
-def find_people(params, kind):
+def find_people(params, kind, bridge_base_url):
     page_index = max(0, int(params.get("page-index", ["0"])[0] or 0))
     page_size = min(PAGE_SIZE_MAX, max(1, int(params.get("page-size", ["30"])[0] or 30)))
     query_name = "findPerformers" if kind == "actors" else "findStudios"
@@ -437,18 +441,17 @@ def find_people(params, kind):
     result = data.get(query_name) or {}
     content = []
     for item in (result.get(list_name) or []):
-        preview_enabled = kind != "studios" or SHOW_STUDIO_IMAGES
         content.append(
             {
                 "id": str(item.get("id")),
                 "title": item.get("name"),
-                "preview": preview_url(item.get("image_path"), enabled=preview_enabled),
+                "preview": preview_url(item.get("image_path"), bridge_base_url),
             }
         )
     return page_response(page_index, page_size, int(result.get("count") or 0), content)
 
 
-def get_person(item_id, kind):
+def get_person(item_id, kind, bridge_base_url):
     query_name = "findPerformer" if kind == "actors" else "findStudio"
     data = graphql(
         f"""
@@ -464,7 +467,7 @@ def get_person(item_id, kind):
     base = {
         "id": str(item.get("id")),
         "title": item.get("name"),
-        "preview": preview_url(item.get("image_path"), enabled=kind != "studios" or SHOW_STUDIO_IMAGES),
+        "preview": preview_url(item.get("image_path"), bridge_base_url),
         "description": item.get("details") or "",
         "views": 0,
     }
@@ -474,7 +477,7 @@ def get_person(item_id, kind):
     return base
 
 
-def get_categories():
+def get_categories(bridge_base_url):
     data = graphql(
         """
         query PlayaTags($filter: FindFilterType) {
@@ -486,7 +489,7 @@ def get_categories():
         {"filter": {"page": 1, "per_page": 1000, "sort": "name", "direction": "ASC"}},
     )
     tags = ((data.get("findTags") or {}).get("tags") or [])
-    return [{"id": str(tag.get("id")), "title": tag.get("name"), "preview": preview_url(tag.get("image_path"))} for tag in tags]
+    return [{"id": str(tag.get("id")), "title": tag.get("name"), "preview": preview_url(tag.get("image_path"), bridge_base_url)} for tag in tags]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -582,6 +585,51 @@ class Handler(BaseHTTPRequestHandler):
             log(f"stream client disconnected scene={scene_id}")
         response.close()
 
+    def proxy_image(self, params):
+        source = (params.get("url") or [""])[0]
+        if not source:
+            self.send_response(404)
+            self.end_headers()
+            return
+
+        parsed = urllib.parse.urlparse(source)
+        extension = os.path.splitext(parsed.path.lower())[1]
+        if extension and extension not in SUPPORTED_IMAGE_EXTENSIONS:
+            self.send_response(415)
+            self.end_headers()
+            return
+
+        headers = {}
+        if STASH_API_KEY and source.startswith(PUBLIC_STASH_URL):
+            headers["ApiKey"] = STASH_API_KEY
+        request = urllib.request.Request(source, headers=headers, method="GET")
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                raw = response.read()
+            image = Image.open(BytesIO(raw))
+            image = ImageOps.exif_transpose(image).convert("RGB")
+            fitted = ImageOps.contain(image, (IMAGE_TILE_SIZE, IMAGE_TILE_SIZE), Image.Resampling.LANCZOS)
+            canvas = Image.new("RGB", (IMAGE_TILE_SIZE, IMAGE_TILE_SIZE), (18, 18, 18))
+            x = (IMAGE_TILE_SIZE - fitted.width) // 2
+            y = (IMAGE_TILE_SIZE - fitted.height) // 2
+            canvas.paste(fitted, (x, y))
+            output = BytesIO()
+            canvas.save(output, format="JPEG", quality=88, optimize=True)
+            body = output.getvalue()
+        except Exception as error:
+            log(f"image proxy failed: {error}")
+            self.send_response(415)
+            self.end_headers()
+            return
+
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "public, max-age=86400")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path = self.playa_path()
@@ -617,20 +665,22 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(ok(video) if video else fail("Video not found", 404))
             elif path.startswith("/stream/"):
                 self.proxy_stream(path.split("/")[-1])
+            elif path == "/image":
+                self.proxy_image(params)
             elif path == "/actors":
-                self.send_json(ok(find_people(params, "actors")))
+                self.send_json(ok(find_people(params, "actors", self.bridge_base_url())))
             elif path.startswith("/actor/"):
-                item = get_person(path.split("/")[-1], "actors")
+                item = get_person(path.split("/")[-1], "actors", self.bridge_base_url())
                 self.send_json(ok(item) if item else fail("Actor not found", 404))
             elif path == "/studios":
-                self.send_json(ok(find_people(params, "studios")))
+                self.send_json(ok(find_people(params, "studios", self.bridge_base_url())))
             elif path.startswith("/studio/"):
-                item = get_person(path.split("/")[-1], "studios")
+                item = get_person(path.split("/")[-1], "studios", self.bridge_base_url())
                 self.send_json(ok(item) if item else fail("Studio not found", 404))
             elif path == "/categories":
-                self.send_json(ok(get_categories()))
+                self.send_json(ok(get_categories(self.bridge_base_url())))
             elif path == "/categories-groups":
-                self.send_json(ok([{"id": "stash-tags", "title": "Tags", "items": get_categories()}]))
+                self.send_json(ok([{"id": "stash-tags", "title": "Tags", "items": get_categories(self.bridge_base_url())}]))
             elif path == "/video-statuses":
                 self.send_json(ok([{"id": "published", "title": "Published"}] if SHOW_VIDEO_STATUS else []))
             else:

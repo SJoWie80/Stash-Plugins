@@ -445,6 +445,9 @@ def get_scene_for_stream(scene_id):
 def find_people(params, kind, bridge_base_url):
     page_index = max(0, int(params.get("page-index", ["0"])[0] or 0))
     page_size = min(PAGE_SIZE_MAX, max(1, int(params.get("page-size", ["30"])[0] or 30)))
+    if kind == "studios":
+        return find_studios_by_scene_count(page_index, page_size, params, bridge_base_url)
+
     query_name = "findPerformers" if kind == "actors" else "findStudios"
     list_name = "performers" if kind == "actors" else "studios"
     find_filter = {
@@ -473,11 +476,73 @@ def find_people(params, kind, bridge_base_url):
         content.append(
             {
                 "id": str(item.get("id")),
-                "title": "" if preview else item.get("name"),
+                "title": item.get("name") if kind == "studios" or not preview else "",
                 "preview": preview,
             }
         )
     return page_response(page_index, page_size, int(result.get("count") or 0), content)
+
+
+def find_studios_by_scene_count(page_index, page_size, params, bridge_base_url):
+    query = (params.get("title", [""])[0] or "").lower()
+    data = graphql(
+        """
+        query PlayaStudiosForCounts($filter: FindFilterType) {
+          findStudios(filter: $filter) {
+            studios { id name image_path details }
+          }
+        }
+        """,
+        {"filter": {"page": 1, "per_page": 1000, "sort": "name", "direction": "ASC"}},
+    )
+    studios = ((data.get("findStudios") or {}).get("studios") or [])
+    if query:
+        studios = [studio for studio in studios if query in (studio.get("name") or "").lower()]
+
+    counts = scene_counts_by_studio()
+    studios.sort(key=lambda studio: (-counts.get(str(studio.get("id")), 0), (studio.get("name") or "").lower()))
+    start = page_index * page_size
+    end = start + page_size
+    content = []
+    for studio in studios[start:end]:
+        content.append(
+            {
+                "id": str(studio.get("id")),
+                "title": studio.get("name"),
+                "preview": preview_url(studio.get("image_path"), bridge_base_url, "square"),
+            }
+        )
+    return page_response(page_index, page_size, len(studios), content)
+
+
+def scene_counts_by_studio():
+    counts = {}
+    scan_filter = {"page": 1, "per_page": SCAN_PAGE_SIZE}
+    for page in range(1, SCAN_MAX_PAGES + 1):
+        scan_filter["page"] = page
+        data = graphql(
+            """
+            query PlayaStudioSceneCounts($filter: FindFilterType) {
+              findScenes(filter: $filter) {
+                count
+                scenes { studio { id } }
+              }
+            }
+            """,
+            {"filter": scan_filter},
+        )
+        result = data.get("findScenes") or {}
+        scenes = result.get("scenes") or []
+        for scene in scenes:
+            studio = scene.get("studio") or {}
+            studio_id = studio.get("id")
+            if studio_id is not None:
+                key = str(studio_id)
+                counts[key] = counts.get(key, 0) + 1
+        total = int(result.get("count") or 0)
+        if not scenes or page * SCAN_PAGE_SIZE >= total:
+            break
+    return counts
 
 
 def get_person(item_id, kind, bridge_base_url):

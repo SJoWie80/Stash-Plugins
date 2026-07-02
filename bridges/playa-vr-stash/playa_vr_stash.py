@@ -17,6 +17,11 @@ except Exception:
     Image = None
     ImageOps = None
 
+try:
+    import cairosvg
+except Exception:
+    cairosvg = None
+
 
 STASH_URL = os.environ.get("STASH_URL", "http://127.0.0.1:9999").rstrip("/")
 PUBLIC_STASH_URL = os.environ.get("PUBLIC_STASH_URL", STASH_URL).rstrip("/")
@@ -30,8 +35,9 @@ SCAN_MAX_PAGES = int(os.environ.get("PLAYA_SCAN_MAX_PAGES", "200"))
 DEFAULT_PROJECTION = os.environ.get("PLAYA_DEFAULT_PROJECTION", "180").upper()
 DEFAULT_STEREO = os.environ.get("PLAYA_DEFAULT_STEREO", "LR").upper()
 SHOW_VIDEO_STATUS = os.environ.get("PLAYA_SHOW_VIDEO_STATUS", "false").lower() in {"1", "true", "yes", "on"}
-SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
+SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"}
 IMAGE_TILE_SIZE = int(os.environ.get("PLAYA_IMAGE_TILE_SIZE", "512"))
+IMAGE_PROXY_VERSION = "2"
 
 
 def log(message):
@@ -100,7 +106,7 @@ def preview_url(value, bridge_base_url):
     if extension and extension not in SUPPORTED_IMAGE_EXTENSIONS:
         return None
     source = absolute_url(value)
-    return f"{bridge_base_url}/api/playa/v2/image?url={urllib.parse.quote(source, safe='')}"
+    return f"{bridge_base_url}/api/playa/v2/image?v={IMAGE_PROXY_VERSION}&url={urllib.parse.quote(source, safe='')}"
 
 
 def with_api_key(url):
@@ -632,6 +638,12 @@ class Handler(BaseHTTPRequestHandler):
             with urllib.request.urlopen(request, timeout=30) as response:
                 raw = response.read()
                 content_type = response.headers.get("Content-Type") or "image/jpeg"
+            if extension == ".svg" or "svg" in content_type.lower():
+                if cairosvg is None:
+                    raise RuntimeError("SVG conversion is unavailable")
+                raw = cairosvg.svg2png(bytestring=raw, output_width=IMAGE_TILE_SIZE * 2, output_height=IMAGE_TILE_SIZE * 2)
+                content_type = "image/png"
+
             if Image is None or ImageOps is None:
                 body = raw
                 output_type = content_type
@@ -644,7 +656,7 @@ class Handler(BaseHTTPRequestHandler):
                 y = (IMAGE_TILE_SIZE - fitted.height) // 2
                 canvas.paste(fitted, (x, y))
                 output = BytesIO()
-                canvas.save(output, format="JPEG", quality=88, optimize=True)
+                canvas.save(output, format="JPEG", quality=90, optimize=True)
                 body = output.getvalue()
                 output_type = "image/jpeg"
         except Exception as error:

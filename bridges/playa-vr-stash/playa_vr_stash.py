@@ -22,6 +22,9 @@ SCAN_PAGE_SIZE = int(os.environ.get("PLAYA_SCAN_PAGE_SIZE", "250"))
 SCAN_MAX_PAGES = int(os.environ.get("PLAYA_SCAN_MAX_PAGES", "200"))
 DEFAULT_PROJECTION = os.environ.get("PLAYA_DEFAULT_PROJECTION", "180").upper()
 DEFAULT_STEREO = os.environ.get("PLAYA_DEFAULT_STEREO", "LR").upper()
+SHOW_VIDEO_STATUS = os.environ.get("PLAYA_SHOW_VIDEO_STATUS", "false").lower() in {"1", "true", "yes", "on"}
+SHOW_STUDIO_IMAGES = os.environ.get("PLAYA_SHOW_STUDIO_IMAGES", "false").lower() in {"1", "true", "yes", "on"}
+SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 
 def log(message):
@@ -76,6 +79,16 @@ def absolute_url(value):
     if value.startswith("http://") or value.startswith("https://"):
         return with_api_key(value)
     return with_api_key(f"{PUBLIC_STASH_URL}/{value.lstrip('/')}")
+
+
+def preview_url(value, enabled=True):
+    if not enabled or not value:
+        return None
+    parsed = urllib.parse.urlparse(value)
+    extension = os.path.splitext(parsed.path.lower())[1]
+    if extension and extension not in SUPPORTED_IMAGE_EXTENSIONS:
+        return None
+    return absolute_url(value)
 
 
 def with_api_key(url):
@@ -179,11 +192,10 @@ def video_list_view(scene):
     performers = names(scene.get("performers"))
     studio = scene.get("studio") or {}
     subtitle = " - ".join([studio.get("name") or "", ", ".join(performers[:3])]).strip(" -")
-    return {
+    video = {
         "id": str(scene.get("id")),
         "title": scene_title(scene),
         "subtitle": subtitle,
-        "status": "Published",
         "preview_image": absolute_url((scene.get("paths") or {}).get("screenshot")),
         "release_date": unix_date(scene.get("date")),
         "has_scripts": False,
@@ -196,6 +208,9 @@ def video_list_view(scene):
             }
         ],
     }
+    if SHOW_VIDEO_STATUS:
+        video["status"] = "Published"
+    return video
 
 
 def video_view(scene, bridge_base_url):
@@ -205,12 +220,11 @@ def video_view(scene, bridge_base_url):
     tags = scene.get("tags") or []
     performers = scene.get("performers") or []
     studio = scene.get("studio")
-    return {
+    video = {
         "id": str(scene.get("id")),
         "title": scene_title(scene),
         "subtitle": studio.get("name") if studio else "",
         "description": scene.get("details") or "",
-        "status": "Published",
         "preview_image": absolute_url((scene.get("paths") or {}).get("screenshot")),
         "release_date": unix_date(scene.get("date")),
         "studio": {"id": str(studio.get("id")), "title": studio.get("name")} if studio else None,
@@ -236,6 +250,9 @@ def video_view(scene, bridge_base_url):
             }
         ],
     }
+    if SHOW_VIDEO_STATUS:
+        video["status"] = "Published"
+    return video
 
 
 SCENE_FIELDS = """
@@ -418,10 +435,16 @@ def find_people(params, kind):
         {"filter": find_filter},
     )
     result = data.get(query_name) or {}
-    content = [
-        {"id": str(item.get("id")), "title": item.get("name"), "preview": absolute_url(item.get("image_path"))}
-        for item in (result.get(list_name) or [])
-    ]
+    content = []
+    for item in (result.get(list_name) or []):
+        preview_enabled = kind != "studios" or SHOW_STUDIO_IMAGES
+        content.append(
+            {
+                "id": str(item.get("id")),
+                "title": item.get("name"),
+                "preview": preview_url(item.get("image_path"), enabled=preview_enabled),
+            }
+        )
     return page_response(page_index, page_size, int(result.get("count") or 0), content)
 
 
@@ -441,7 +464,7 @@ def get_person(item_id, kind):
     base = {
         "id": str(item.get("id")),
         "title": item.get("name"),
-        "preview": absolute_url(item.get("image_path")),
+        "preview": preview_url(item.get("image_path"), enabled=kind != "studios" or SHOW_STUDIO_IMAGES),
         "description": item.get("details") or "",
         "views": 0,
     }
@@ -463,7 +486,7 @@ def get_categories():
         {"filter": {"page": 1, "per_page": 1000, "sort": "name", "direction": "ASC"}},
     )
     tags = ((data.get("findTags") or {}).get("tags") or [])
-    return [{"id": str(tag.get("id")), "title": tag.get("name"), "preview": absolute_url(tag.get("image_path"))} for tag in tags]
+    return [{"id": str(tag.get("id")), "title": tag.get("name"), "preview": preview_url(tag.get("image_path"))} for tag in tags]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -609,7 +632,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/categories-groups":
                 self.send_json(ok([{"id": "stash-tags", "title": "Tags", "items": get_categories()}]))
             elif path == "/video-statuses":
-                self.send_json(ok([{"id": "published", "title": "Published"}]))
+                self.send_json(ok([{"id": "published", "title": "Published"}] if SHOW_VIDEO_STATUS else []))
             else:
                 self.send_json(fail("Route not found", 404), status=404)
         except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError) as error:

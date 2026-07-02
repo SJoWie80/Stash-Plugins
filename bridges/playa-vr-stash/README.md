@@ -37,6 +37,8 @@ The bridge serves PLAY'A under `/api/playa/v2`, but PLAY'A only needs the host U
 | `PLAYA_SCAN_MAX_PAGES` | `200` | Maximum internal pages scanned for filtered PLAY'A views. |
 | `PLAYA_DEFAULT_PROJECTION` | `180` | Default projection when no filename/tag hint is found. Use `180`, `360`, `FSH`, or `FLT`. |
 | `PLAYA_DEFAULT_STEREO` | `LR` | Default stereo mode when no filename/tag hint is found. Use `LR` for side-by-side, `TB` for over-under, or `MN` for mono. |
+| `PLAYA_SHOW_VIDEO_STATUS` | `false` | Show PLAY'A status badges such as `Published` on videos. |
+| `PLAYA_SHOW_STUDIO_IMAGES` | `false` | Send studio images to PLAY'A. Disabled by default because wide logos are often squeezed in PLAY'A tiles. |
 
 If `STASH_API_KEY` is set, the bridge adds `apikey` to Stash media URLs so PLAY'A can load screenshots and streams without custom headers. Keep this bridge on your trusted LAN and do not expose it publicly.
 

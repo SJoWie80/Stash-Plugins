@@ -37,10 +37,11 @@ DEFAULT_STEREO = os.environ.get("PLAYA_DEFAULT_STEREO", "LR").upper()
 SHOW_VIDEO_STATUS = os.environ.get("PLAYA_SHOW_VIDEO_STATUS", "false").lower() in {"1", "true", "yes", "on"}
 SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"}
 IMAGE_TILE_SIZE = int(os.environ.get("PLAYA_IMAGE_TILE_SIZE", "512"))
-IMAGE_PROXY_VERSION = "2"
+IMAGE_PROXY_VERSION = "3"
 IMAGE_SHAPES = {
     "square": (IMAGE_TILE_SIZE, IMAGE_TILE_SIZE),
     "portrait": (IMAGE_TILE_SIZE, int(IMAGE_TILE_SIZE * 1.35)),
+    "wide": (int(IMAGE_TILE_SIZE * 1.75), IMAGE_TILE_SIZE),
 }
 
 
@@ -459,7 +460,7 @@ def find_people(params, kind, bridge_base_url):
     result = data.get(query_name) or {}
     content = []
     for item in (result.get(list_name) or []):
-        preview = preview_url(item.get("image_path"), bridge_base_url, "portrait" if kind == "actors" else "square")
+        preview = preview_url(item.get("image_path"), bridge_base_url, "portrait" if kind == "actors" else "wide")
         content.append(
             {
                 "id": str(item.get("id")),
@@ -486,7 +487,7 @@ def get_person(item_id, kind, bridge_base_url):
     base = {
         "id": str(item.get("id")),
         "title": item.get("name"),
-        "preview": preview_url(item.get("image_path"), bridge_base_url, "portrait" if kind == "actors" else "square"),
+        "preview": preview_url(item.get("image_path"), bridge_base_url, "portrait" if kind == "actors" else "wide"),
         "description": item.get("details") or "",
         "views": 0,
     }
@@ -660,16 +661,16 @@ class Handler(BaseHTTPRequestHandler):
                 output_type = content_type
             else:
                 image = Image.open(BytesIO(raw))
-                image = ImageOps.exif_transpose(image).convert("RGB")
+                image = ImageOps.exif_transpose(image).convert("RGBA")
                 fitted = ImageOps.contain(image, target_size, Image.Resampling.LANCZOS)
-                canvas = Image.new("RGB", target_size, (18, 18, 18))
+                canvas = Image.new("RGBA", target_size, (0, 0, 0, 0))
                 x = (target_size[0] - fitted.width) // 2
                 y = (target_size[1] - fitted.height) // 2
-                canvas.paste(fitted, (x, y))
+                canvas.paste(fitted, (x, y), fitted)
                 output = BytesIO()
-                canvas.save(output, format="JPEG", quality=90, optimize=True)
+                canvas.save(output, format="PNG", optimize=True)
                 body = output.getvalue()
-                output_type = "image/jpeg"
+                output_type = "image/png"
         except Exception as error:
             log(f"image proxy failed: {error}")
             self.send_response(415)

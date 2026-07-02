@@ -17,6 +17,12 @@ STASH_API_KEY = os.environ.get("STASH_API_KEY", "")
 HOST = os.environ.get("PLAYA_BRIDGE_HOST", "0.0.0.0")
 PORT = int(os.environ.get("PLAYA_BRIDGE_PORT", "8890"))
 PAGE_SIZE_MAX = 100
+SCAN_PAGE_SIZE = int(os.environ.get("PLAYA_SCAN_PAGE_SIZE", "250"))
+SCAN_MAX_PAGES = int(os.environ.get("PLAYA_SCAN_MAX_PAGES", "200"))
+
+
+def log(message):
+    sys.stderr.write(f"[playa-vr-stash] {message}\n")
 
 
 def ok(data=None):
@@ -80,6 +86,10 @@ def scene_title(scene):
 
 def names(items):
     return [item.get("name") for item in (items or []) if item.get("name")]
+
+
+def ids(items):
+    return {str(item.get("id")) for item in (items or []) if item.get("id") is not None}
 
 
 def unix_date(value):
@@ -235,28 +245,100 @@ def find_scenes(params):
     if params.get("title", [""])[0]:
         find_filter["q"] = params["title"][0]
 
-    scene_filter = {}
-    if params.get("studio", [""])[0]:
-        scene_filter["studios"] = {"value": [params["studio"][0]], "modifier": "INCLUDES"}
-    if params.get("actor", [""])[0]:
-        scene_filter["performers"] = {"value": [params["actor"][0]], "modifier": "INCLUDES"}
-    if params.get("included-categories", [""])[0]:
-        scene_filter["tags"] = {"value": params["included-categories"][0].split(","), "modifier": "INCLUDES_ALL"}
+    relation_filters = {
+        "studio": str(params.get("studio", [""])[0] or ""),
+        "actor": str(params.get("actor", [""])[0] or ""),
+        "included_categories": [value for value in str(params.get("included-categories", [""])[0] or "").split(",") if value],
+        "excluded_categories": [value for value in str(params.get("excluded-categories", [""])[0] or "").split(",") if value],
+    }
+    if any(relation_filters.values()):
+        return find_scenes_by_scan(find_filter, relation_filters, page_index, page_size)
 
     data = graphql(
         f"""
-        query PlayaScenes($filter: FindFilterType, $sceneFilter: SceneFilterType) {{
-          findScenes(filter: $filter, scene_filter: $sceneFilter) {{
+        query PlayaScenes($filter: FindFilterType) {{
+          findScenes(filter: $filter) {{
             count
             scenes {{ {SCENE_FIELDS} }}
           }}
         }}
         """,
-        {"filter": find_filter, "sceneFilter": scene_filter or None},
+        {"filter": find_filter},
     )
     result = data.get("findScenes") or {}
     scenes = result.get("scenes") or []
-    return page_response(page_index, page_size, int(result.get("count") or 0), [video_list_view(scene) for scene in scenes])
+    total = int(result.get("count") or 0)
+    log(f"videos page={page_index} size={page_size} filters=none returned={len(scenes)} total={total}")
+    return page_response(page_index, page_size, total, [video_list_view(scene) for scene in scenes])
+
+
+def scene_matches(scene, relation_filters):
+    studio_id = relation_filters["studio"]
+    actor_id = relation_filters["actor"]
+    included = set(relation_filters["included_categories"])
+    excluded = set(relation_filters["excluded_categories"])
+
+    studio = scene.get("studio") or {}
+    if studio_id and str(studio.get("id")) != studio_id:
+        return False
+
+    performer_ids = ids(scene.get("performers"))
+    if actor_id and actor_id not in performer_ids:
+        return False
+
+    tag_ids = ids(scene.get("tags"))
+    if included and not included.issubset(tag_ids):
+        return False
+    if excluded and excluded.intersection(tag_ids):
+        return False
+
+    return True
+
+
+def find_scenes_by_scan(find_filter, relation_filters, page_index, page_size):
+    matches = []
+    scanned = 0
+    total = 0
+    scan_filter = dict(find_filter)
+    scan_filter["per_page"] = SCAN_PAGE_SIZE
+
+    for page in range(1, SCAN_MAX_PAGES + 1):
+        scan_filter["page"] = page
+        data = graphql(
+            f"""
+            query PlayaSceneScan($filter: FindFilterType) {{
+              findScenes(filter: $filter) {{
+                count
+                scenes {{ {SCENE_FIELDS} }}
+              }}
+            }}
+            """,
+            {"filter": scan_filter},
+        )
+        result = data.get("findScenes") or {}
+        scenes = result.get("scenes") or []
+        total = int(result.get("count") or 0)
+        scanned += len(scenes)
+        matches.extend(scene for scene in scenes if scene_matches(scene, relation_filters))
+        if not scenes or page * SCAN_PAGE_SIZE >= total:
+            break
+
+    start = page_index * page_size
+    end = start + page_size
+    page_matches = matches[start:end]
+    log(
+        "videos page={} size={} studio={} actor={} tags={} excluded={} scanned={} matches={}".format(
+            page_index,
+            page_size,
+            relation_filters["studio"] or "-",
+            relation_filters["actor"] or "-",
+            ",".join(relation_filters["included_categories"]) or "-",
+            ",".join(relation_filters["excluded_categories"]) or "-",
+            scanned,
+            len(matches),
+        )
+    )
+    return page_response(page_index, page_size, len(matches), [video_list_view(scene) for scene in page_matches])
 
 
 def get_scene(scene_id):

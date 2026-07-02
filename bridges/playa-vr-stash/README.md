@@ -31,6 +31,8 @@ The bridge serves PLAY'A under `/api/playa/v2`, but PLAY'A only needs the host U
 | `PLAYA_BRIDGE_HOST` | `0.0.0.0` | Bind address. |
 | `PLAYA_BRIDGE_PORT` | `8890` | Bridge HTTP port. |
 | `PUBLIC_STASH_URL` | `STASH_URL` | Optional Stash URL returned to PLAY'A for images and streams. |
+| `PLAYA_SCAN_PAGE_SIZE` | `250` | Internal page size used when filtering videos by studio, actor, or tag. |
+| `PLAYA_SCAN_MAX_PAGES` | `200` | Maximum internal pages scanned for filtered PLAY'A views. |
 
 If `STASH_API_KEY` is set, the bridge adds `apikey` to Stash media URLs so PLAY'A can load screenshots and streams without custom headers. Keep this bridge on your trusted LAN and do not expose it publicly.
 

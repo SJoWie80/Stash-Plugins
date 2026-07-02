@@ -11,7 +11,11 @@ import urllib.request
 from io import BytesIO
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from PIL import Image, ImageOps
+try:
+    from PIL import Image, ImageOps
+except Exception:
+    Image = None
+    ImageOps = None
 
 
 STASH_URL = os.environ.get("STASH_URL", "http://127.0.0.1:9999").rstrip("/")
@@ -606,16 +610,22 @@ class Handler(BaseHTTPRequestHandler):
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
                 raw = response.read()
-            image = Image.open(BytesIO(raw))
-            image = ImageOps.exif_transpose(image).convert("RGB")
-            fitted = ImageOps.contain(image, (IMAGE_TILE_SIZE, IMAGE_TILE_SIZE), Image.Resampling.LANCZOS)
-            canvas = Image.new("RGB", (IMAGE_TILE_SIZE, IMAGE_TILE_SIZE), (18, 18, 18))
-            x = (IMAGE_TILE_SIZE - fitted.width) // 2
-            y = (IMAGE_TILE_SIZE - fitted.height) // 2
-            canvas.paste(fitted, (x, y))
-            output = BytesIO()
-            canvas.save(output, format="JPEG", quality=88, optimize=True)
-            body = output.getvalue()
+                content_type = response.headers.get("Content-Type") or "image/jpeg"
+            if Image is None or ImageOps is None:
+                body = raw
+                output_type = content_type
+            else:
+                image = Image.open(BytesIO(raw))
+                image = ImageOps.exif_transpose(image).convert("RGB")
+                fitted = ImageOps.contain(image, (IMAGE_TILE_SIZE, IMAGE_TILE_SIZE), Image.Resampling.LANCZOS)
+                canvas = Image.new("RGB", (IMAGE_TILE_SIZE, IMAGE_TILE_SIZE), (18, 18, 18))
+                x = (IMAGE_TILE_SIZE - fitted.width) // 2
+                y = (IMAGE_TILE_SIZE - fitted.height) // 2
+                canvas.paste(fitted, (x, y))
+                output = BytesIO()
+                canvas.save(output, format="JPEG", quality=88, optimize=True)
+                body = output.getvalue()
+                output_type = "image/jpeg"
         except Exception as error:
             log(f"image proxy failed: {error}")
             self.send_response(415)
@@ -623,7 +633,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         self.send_response(200)
-        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Type", output_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "public, max-age=86400")
         self.send_header("Access-Control-Allow-Origin", "*")

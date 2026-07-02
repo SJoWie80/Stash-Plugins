@@ -1,0 +1,12 @@
+services:
+  playa-vr-stash:
+    build: .
+    container_name: playa-vr-stash
+    ports:
+      - "8890:8890"
+    environment:
+      STASH_URL: "http://192.168.101.4:30198"
+      PUBLIC_STASH_URL: "http://192.168.101.4:30198"
+      STASH_API_KEY: ""
+      PLAYA_BRIDGE_HOST: "0.0.0.0"
+      PLAYA_BRIDGE_PORT: "8890"

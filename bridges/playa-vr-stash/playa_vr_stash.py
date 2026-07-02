@@ -20,6 +20,8 @@ PORT = int(os.environ.get("PLAYA_BRIDGE_PORT", "8890"))
 PAGE_SIZE_MAX = 100
 SCAN_PAGE_SIZE = int(os.environ.get("PLAYA_SCAN_PAGE_SIZE", "250"))
 SCAN_MAX_PAGES = int(os.environ.get("PLAYA_SCAN_MAX_PAGES", "200"))
+DEFAULT_PROJECTION = os.environ.get("PLAYA_DEFAULT_PROJECTION", "180").upper()
+DEFAULT_STEREO = os.environ.get("PLAYA_DEFAULT_STEREO", "LR").upper()
 
 
 def log(message):
@@ -118,18 +120,20 @@ def infer_projection_and_stereo(scene):
         ]
     ).lower()
 
-    projection = "FLT"
-    if "fisheye" in text or "fsh" in text:
+    normalized = re.sub(r"[^a-z0-9]+", " ", text)
+
+    projection = DEFAULT_PROJECTION if DEFAULT_PROJECTION in {"FLT", "180", "360", "FSH"} else "180"
+    if "fisheye" in normalized or re.search(r"\bfsh\b", normalized):
         projection = "FSH"
-    elif "360" in text:
+    elif re.search(r"\b360\b|360vr|vr360", normalized):
         projection = "360"
-    elif "180" in text or "vr" in text:
+    elif re.search(r"\b180\b|180vr|vr180|\bvr\b", normalized):
         projection = "180"
 
-    stereo = "MN"
-    if re.search(r"\b(tb|bt|top[ -]?bottom|over[ -]?under|ou)\b", text):
+    stereo = DEFAULT_STEREO if DEFAULT_STEREO in {"MN", "LR", "RL", "TB", "BT"} else "LR"
+    if re.search(r"\b(tb|bt|top bottom|topbottom|over under|overunder|ou|3dv)\b", normalized):
         stereo = "TB"
-    elif re.search(r"\b(lr|rl|sbs|side[ -]?by[ -]?side|3d)\b", text):
+    elif re.search(r"\b(lr|rl|sbs|hsbs|fsbs|side by side|sidebyside|3dh|3d)\b", normalized):
         stereo = "LR"
 
     return projection, stereo

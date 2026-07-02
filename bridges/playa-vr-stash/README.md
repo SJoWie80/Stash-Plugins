@@ -35,6 +35,8 @@ The bridge serves PLAY'A under `/api/playa/v2`, but PLAY'A only needs the host U
 | `PUBLIC_BRIDGE_URL` | request host | Optional bridge URL returned to PLAY'A for proxied video streams. |
 | `PLAYA_SCAN_PAGE_SIZE` | `250` | Internal page size used when filtering videos by studio, actor, or tag. |
 | `PLAYA_SCAN_MAX_PAGES` | `200` | Maximum internal pages scanned for filtered PLAY'A views. |
+| `PLAYA_DEFAULT_PROJECTION` | `180` | Default projection when no filename/tag hint is found. Use `180`, `360`, `FSH`, or `FLT`. |
+| `PLAYA_DEFAULT_STEREO` | `LR` | Default stereo mode when no filename/tag hint is found. Use `LR` for side-by-side, `TB` for over-under, or `MN` for mono. |
 
 If `STASH_API_KEY` is set, the bridge adds `apikey` to Stash media URLs so PLAY'A can load screenshots and streams without custom headers. Keep this bridge on your trusted LAN and do not expose it publicly.
 

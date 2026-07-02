@@ -65,10 +65,14 @@ def graphql(query, variables=None):
     headers = {"Content-Type": "application/json"}
     if STASH_API_KEY:
         headers["ApiKey"] = STASH_API_KEY
-    request = urllib.request.Request(f"{STASH_URL}/graphql", data=body, headers=headers, method="POST")
+    graphql_url = f"{STASH_URL}/graphql"
+    request = urllib.request.Request(graphql_url, data=body, headers=headers, method="POST")
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.URLError as error:
+        log(f"stash connection failed url={graphql_url}: {error}")
+        raise
     except urllib.error.HTTPError as error:
         details = error.read().decode("utf-8", errors="replace")
         log(f"graphql http error status={error.code}: {details}")
@@ -511,6 +515,23 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    def health(self):
+        payload = {
+            "bridge": "ok",
+            "stash_url": STASH_URL,
+            "public_stash_url": PUBLIC_STASH_URL,
+            "public_bridge_url": PUBLIC_BRIDGE_URL or self.bridge_base_url(),
+        }
+        try:
+            data = graphql("query PlayaHealth { version { version } }", {})
+            payload["stash"] = "ok"
+            payload["stash_version"] = (((data or {}).get("version") or {}).get("version")) or data.get("version")
+            self.send_json(ok(payload))
+        except Exception as error:
+            payload["stash"] = "error"
+            payload["error"] = str(error)
+            self.send_json(fail(payload))
+
     def bridge_base_url(self):
         if PUBLIC_BRIDGE_URL:
             return PUBLIC_BRIDGE_URL
@@ -647,6 +668,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if path in ("", "/"):
                 self.send_json(ok({"name": "Stash PLAY'A VR Bridge", "api": "/api/playa/v2"}))
+            elif path in ("/health", "/debug/stash"):
+                self.health()
             elif path == "/version":
                 self.send_json(ok("1.10.0"))
             elif path == "/config":

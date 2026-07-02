@@ -56,7 +56,9 @@ def graphql(query, variables=None):
     with urllib.request.urlopen(request, timeout=30) as response:
         payload = json.loads(response.read().decode("utf-8"))
     if payload.get("errors"):
-        raise RuntimeError("; ".join(error.get("message", str(error)) for error in payload["errors"]))
+        message = "; ".join(error.get("message", str(error)) for error in payload["errors"])
+        log(f"graphql error: {message}")
+        raise RuntimeError(message)
     return payload.get("data") or {}
 
 
@@ -128,8 +130,9 @@ def infer_projection_and_stereo(scene):
 
 
 def quality_for_scene(scene):
-    width = int(scene.get("width") or 0)
-    height = int(scene.get("height") or 0)
+    file_info = (scene.get("files") or [{}])[0] or {}
+    width = int(file_info.get("width") or 0)
+    height = int(file_info.get("height") or 0)
     size = max(width, height)
     if size >= 7680:
         return "8K", 85
@@ -153,7 +156,8 @@ def stream_url(scene):
 
 def video_list_view(scene):
     projection, stereo = infer_projection_and_stereo(scene)
-    duration = int(float(scene.get("duration") or 0))
+    file_info = (scene.get("files") or [{}])[0] or {}
+    duration = int(float(file_info.get("duration") or 0))
     performers = names(scene.get("performers"))
     subtitle = " - ".join([scene.get("studio", {}).get("name") or "", ", ".join(performers[:3])]).strip(" -")
     return {
@@ -177,7 +181,8 @@ def video_list_view(scene):
 def video_view(scene):
     projection, stereo = infer_projection_and_stereo(scene)
     quality_name, quality_order = quality_for_scene(scene)
-    duration = int(float(scene.get("duration") or 0))
+    file_info = (scene.get("files") or [{}])[0] or {}
+    duration = int(float(file_info.get("duration") or 0))
     tags = scene.get("tags") or []
     performers = scene.get("performers") or []
     studio = scene.get("studio")
@@ -218,12 +223,9 @@ SCENE_FIELDS = """
   title
   details
   date
-  duration
   play_count
-  width
-  height
   paths { screenshot stream }
-  files { path basename }
+  files { path basename duration width height }
   studio { id name }
   performers { id name }
   tags { id name }
@@ -516,6 +518,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self.send_json(fail("Route not found", 404), status=404)
         except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError) as error:
+            log(f"request failed path={path}: {error}")
             self.send_json(fail(error))
 
     def do_POST(self):

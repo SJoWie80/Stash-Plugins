@@ -153,6 +153,11 @@ def quality_for_scene(scene):
     return "Source", 25
 
 
+def duration_seconds(scene):
+    file_info = (scene.get("files") or [{}])[0] or {}
+    return max(1, int(float(file_info.get("duration") or 0)))
+
+
 def stash_stream_url(scene):
     paths = scene.get("paths") or {}
     if paths.get("stream"):
@@ -166,8 +171,7 @@ def stream_url(scene, bridge_base_url):
 
 def video_list_view(scene):
     projection, stereo = infer_projection_and_stereo(scene)
-    file_info = (scene.get("files") or [{}])[0] or {}
-    duration = int(float(file_info.get("duration") or 0))
+    duration = duration_seconds(scene)
     performers = names(scene.get("performers"))
     studio = scene.get("studio") or {}
     subtitle = " - ".join([studio.get("name") or "", ", ".join(performers[:3])]).strip(" -")
@@ -175,6 +179,7 @@ def video_list_view(scene):
         "id": str(scene.get("id")),
         "title": scene_title(scene),
         "subtitle": subtitle,
+        "status": "Published",
         "preview_image": absolute_url((scene.get("paths") or {}).get("screenshot")),
         "release_date": unix_date(scene.get("date")),
         "has_scripts": False,
@@ -192,8 +197,7 @@ def video_list_view(scene):
 def video_view(scene, bridge_base_url):
     projection, stereo = infer_projection_and_stereo(scene)
     quality_name, quality_order = quality_for_scene(scene)
-    file_info = (scene.get("files") or [{}])[0] or {}
-    duration = int(float(file_info.get("duration") or 0))
+    duration = duration_seconds(scene)
     tags = scene.get("tags") or []
     performers = scene.get("performers") or []
     studio = scene.get("studio")
@@ -202,9 +206,10 @@ def video_view(scene, bridge_base_url):
         "title": scene_title(scene),
         "subtitle": studio.get("name") if studio else "",
         "description": scene.get("details") or "",
+        "status": "Published",
         "preview_image": absolute_url((scene.get("paths") or {}).get("screenshot")),
         "release_date": unix_date(scene.get("date")),
-        "studio": [{"id": str(studio.get("id")), "title": studio.get("name")}] if studio else [],
+        "studio": {"id": str(studio.get("id")), "title": studio.get("name")} if studio else None,
         "categories": [{"id": str(tag.get("id")), "title": tag.get("name")} for tag in tags],
         "actors": [{"id": str(actor.get("id")), "title": actor.get("name")} for actor in performers],
         "views": int(scene.get("play_count") or 0),
@@ -540,11 +545,14 @@ class Handler(BaseHTTPRequestHandler):
             response.close()
             return
 
-        while True:
-            chunk = response.read(1024 * 1024)
-            if not chunk:
-                break
-            self.wfile.write(chunk)
+        try:
+            while True:
+                chunk = response.read(1024 * 1024)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            log(f"stream client disconnected scene={scene_id}")
         response.close()
 
     def do_GET(self):
@@ -597,7 +605,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/categories-groups":
                 self.send_json(ok([{"id": "stash-tags", "title": "Tags", "items": get_categories()}]))
             elif path == "/video-statuses":
-                self.send_json(ok([]))
+                self.send_json(ok([{"id": "published", "title": "Published"}]))
             else:
                 self.send_json(fail("Route not found", 404), status=404)
         except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError) as error:

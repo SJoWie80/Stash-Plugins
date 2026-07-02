@@ -38,6 +38,10 @@ SHOW_VIDEO_STATUS = os.environ.get("PLAYA_SHOW_VIDEO_STATUS", "false").lower() i
 SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"}
 IMAGE_TILE_SIZE = int(os.environ.get("PLAYA_IMAGE_TILE_SIZE", "512"))
 IMAGE_PROXY_VERSION = "2"
+IMAGE_SHAPES = {
+    "square": (IMAGE_TILE_SIZE, IMAGE_TILE_SIZE),
+    "portrait": (IMAGE_TILE_SIZE, int(IMAGE_TILE_SIZE * 1.35)),
+}
 
 
 def log(message):
@@ -98,7 +102,7 @@ def absolute_url(value):
     return with_api_key(f"{PUBLIC_STASH_URL}/{value.lstrip('/')}")
 
 
-def preview_url(value, bridge_base_url):
+def preview_url(value, bridge_base_url, shape="square"):
     if not value:
         return None
     parsed = urllib.parse.urlparse(value)
@@ -106,7 +110,7 @@ def preview_url(value, bridge_base_url):
     if extension and extension not in SUPPORTED_IMAGE_EXTENSIONS:
         return None
     source = absolute_url(value)
-    return f"{bridge_base_url}/api/playa/v2/image?v={IMAGE_PROXY_VERSION}&url={urllib.parse.quote(source, safe='')}"
+    return f"{bridge_base_url}/api/playa/v2/image?v={IMAGE_PROXY_VERSION}&shape={shape}&url={urllib.parse.quote(source, safe='')}"
 
 
 def with_api_key(url):
@@ -455,11 +459,12 @@ def find_people(params, kind, bridge_base_url):
     result = data.get(query_name) or {}
     content = []
     for item in (result.get(list_name) or []):
+        preview = preview_url(item.get("image_path"), bridge_base_url, "portrait" if kind == "actors" else "square")
         content.append(
             {
                 "id": str(item.get("id")),
-                "title": item.get("name"),
-                "preview": preview_url(item.get("image_path"), bridge_base_url),
+                "title": "" if preview else item.get("name"),
+                "preview": preview,
             }
         )
     return page_response(page_index, page_size, int(result.get("count") or 0), content)
@@ -481,7 +486,7 @@ def get_person(item_id, kind, bridge_base_url):
     base = {
         "id": str(item.get("id")),
         "title": item.get("name"),
-        "preview": preview_url(item.get("image_path"), bridge_base_url),
+        "preview": preview_url(item.get("image_path"), bridge_base_url, "portrait" if kind == "actors" else "square"),
         "description": item.get("details") or "",
         "views": 0,
     }
@@ -503,7 +508,11 @@ def get_categories(bridge_base_url):
         {"filter": {"page": 1, "per_page": 1000, "sort": "name", "direction": "ASC"}},
     )
     tags = ((data.get("findTags") or {}).get("tags") or [])
-    return [{"id": str(tag.get("id")), "title": tag.get("name"), "preview": preview_url(tag.get("image_path"), bridge_base_url)} for tag in tags]
+    content = []
+    for tag in tags:
+        preview = preview_url(tag.get("image_path"), bridge_base_url)
+        content.append({"id": str(tag.get("id")), "title": "" if preview else tag.get("name"), "preview": preview})
+    return content
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -618,6 +627,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def proxy_image(self, params):
         source = (params.get("url") or [""])[0]
+        shape = (params.get("shape") or ["square"])[0]
         if not source:
             self.send_response(404)
             self.end_headers()
@@ -629,6 +639,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(415)
             self.end_headers()
             return
+        target_size = IMAGE_SHAPES.get(shape, IMAGE_SHAPES["square"])
 
         headers = {}
         if STASH_API_KEY and source.startswith(PUBLIC_STASH_URL):
@@ -641,7 +652,7 @@ class Handler(BaseHTTPRequestHandler):
             if extension == ".svg" or "svg" in content_type.lower():
                 if cairosvg is None:
                     raise RuntimeError("SVG conversion is unavailable")
-                raw = cairosvg.svg2png(bytestring=raw, output_width=IMAGE_TILE_SIZE * 2, output_height=IMAGE_TILE_SIZE * 2)
+                raw = cairosvg.svg2png(bytestring=raw, output_width=target_size[0] * 2, output_height=target_size[1] * 2)
                 content_type = "image/png"
 
             if Image is None or ImageOps is None:
@@ -650,10 +661,10 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 image = Image.open(BytesIO(raw))
                 image = ImageOps.exif_transpose(image).convert("RGB")
-                fitted = ImageOps.contain(image, (IMAGE_TILE_SIZE, IMAGE_TILE_SIZE), Image.Resampling.LANCZOS)
-                canvas = Image.new("RGB", (IMAGE_TILE_SIZE, IMAGE_TILE_SIZE), (18, 18, 18))
-                x = (IMAGE_TILE_SIZE - fitted.width) // 2
-                y = (IMAGE_TILE_SIZE - fitted.height) // 2
+                fitted = ImageOps.contain(image, target_size, Image.Resampling.LANCZOS)
+                canvas = Image.new("RGB", target_size, (18, 18, 18))
+                x = (target_size[0] - fitted.width) // 2
+                y = (target_size[1] - fitted.height) // 2
                 canvas.paste(fitted, (x, y))
                 output = BytesIO()
                 canvas.save(output, format="JPEG", quality=90, optimize=True)

@@ -37,11 +37,10 @@ DEFAULT_STEREO = os.environ.get("PLAYA_DEFAULT_STEREO", "LR").upper()
 SHOW_VIDEO_STATUS = os.environ.get("PLAYA_SHOW_VIDEO_STATUS", "false").lower() in {"1", "true", "yes", "on"}
 SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"}
 IMAGE_TILE_SIZE = int(os.environ.get("PLAYA_IMAGE_TILE_SIZE", "512"))
-IMAGE_PROXY_VERSION = "4"
+IMAGE_PROXY_VERSION = "5"
 IMAGE_SHAPES = {
     "square": (IMAGE_TILE_SIZE, IMAGE_TILE_SIZE),
     "portrait": (IMAGE_TILE_SIZE, int(IMAGE_TILE_SIZE * 1.35)),
-    "wide": (IMAGE_TILE_SIZE * 3, IMAGE_TILE_SIZE),
 }
 
 
@@ -112,6 +111,16 @@ def preview_url(value, bridge_base_url, shape="square"):
         return None
     source = absolute_url(value)
     return f"{bridge_base_url}/api/playa/v2/image?v={IMAGE_PROXY_VERSION}&shape={shape}&url={urllib.parse.quote(source, safe='')}"
+
+
+def trim_transparent(image):
+    if image.mode != "RGBA":
+        image = image.convert("RGBA")
+    alpha = image.getchannel("A")
+    bbox = alpha.getbbox()
+    if not bbox:
+        return image
+    return image.crop(bbox)
 
 
 def with_api_key(url):
@@ -460,7 +469,7 @@ def find_people(params, kind, bridge_base_url):
     result = data.get(query_name) or {}
     content = []
     for item in (result.get(list_name) or []):
-        preview = preview_url(item.get("image_path"), bridge_base_url, "portrait" if kind == "actors" else "wide")
+        preview = preview_url(item.get("image_path"), bridge_base_url, "portrait" if kind == "actors" else "square")
         content.append(
             {
                 "id": str(item.get("id")),
@@ -487,7 +496,7 @@ def get_person(item_id, kind, bridge_base_url):
     base = {
         "id": str(item.get("id")),
         "title": item.get("name"),
-        "preview": preview_url(item.get("image_path"), bridge_base_url, "portrait" if kind == "actors" else "wide"),
+        "preview": preview_url(item.get("image_path"), bridge_base_url, "portrait" if kind == "actors" else "square"),
         "description": item.get("details") or "",
         "views": 0,
     }
@@ -662,6 +671,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 image = Image.open(BytesIO(raw))
                 image = ImageOps.exif_transpose(image).convert("RGBA")
+                image = trim_transparent(image)
                 fitted = ImageOps.contain(image, target_size, Image.Resampling.LANCZOS)
                 canvas = Image.new("RGBA", target_size, (0, 0, 0, 0))
                 x = (target_size[0] - fitted.width) // 2

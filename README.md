@@ -2,6 +2,11 @@
 
 This repository contains Stash plugin packages maintained by SJoWie80.
 
+## Related Apps
+
+- [Stash](https://docs.stashapp.cc/) ([GitHub](https://github.com/stashapp/stash)) - self-hosted media organizer and server.
+- [PLAY'A VR](https://playavr.com/) ([Downloads](https://playavr.com/download-app)) - VR video player used by the PLAY'A bridge.
+
 ## Stash Plugin Source
 
 Add this plugin source URL in Stash:

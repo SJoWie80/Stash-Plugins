@@ -4,6 +4,11 @@ Companion Docker service that exposes a PLAY'A API v2 compatible website backed 
 
 PLAY'A does not connect to a normal Stash UI plugin. In PLAY'A you add this bridge as a website. The bridge then queries Stash through GraphQL and returns PLAY'A-compatible videos, studios, actors, categories, thumbnails, and stream URLs.
 
+## Related Apps
+
+- [Stash](https://docs.stashapp.cc/) ([GitHub](https://github.com/stashapp/stash)) - source library and GraphQL server.
+- [PLAY'A VR](https://playavr.com/) ([Downloads](https://playavr.com/download-app)) - VR video player that connects to this bridge as a website.
+
 ## Features
 
 - Browse Stash scenes in PLAY'A as videos.

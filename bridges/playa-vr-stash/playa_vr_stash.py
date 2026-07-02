@@ -53,8 +53,13 @@ def graphql(query, variables=None):
     if STASH_API_KEY:
         headers["ApiKey"] = STASH_API_KEY
     request = urllib.request.Request(f"{STASH_URL}/graphql", data=body, headers=headers, method="POST")
-    with urllib.request.urlopen(request, timeout=30) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as error:
+        details = error.read().decode("utf-8", errors="replace")
+        log(f"graphql http error status={error.code}: {details}")
+        raise RuntimeError(f"Stash GraphQL HTTP {error.code}: {details[:500]}")
     if payload.get("errors"):
         message = "; ".join(error.get("message", str(error)) for error in payload["errors"])
         log(f"graphql error: {message}")
@@ -159,7 +164,8 @@ def video_list_view(scene):
     file_info = (scene.get("files") or [{}])[0] or {}
     duration = int(float(file_info.get("duration") or 0))
     performers = names(scene.get("performers"))
-    subtitle = " - ".join([scene.get("studio", {}).get("name") or "", ", ".join(performers[:3])]).strip(" -")
+    studio = scene.get("studio") or {}
+    subtitle = " - ".join([studio.get("name") or "", ", ".join(performers[:3])]).strip(" -")
     return {
         "id": str(scene.get("id")),
         "title": scene_title(scene),
@@ -225,7 +231,7 @@ SCENE_FIELDS = """
   date
   play_count
   paths { screenshot stream }
-  files { path basename duration width height }
+  files { path basename }
   studio { id name }
   performers { id name }
   tags { id name }

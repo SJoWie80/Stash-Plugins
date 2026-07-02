@@ -13,6 +13,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 STASH_URL = os.environ.get("STASH_URL", "http://127.0.0.1:9999").rstrip("/")
 PUBLIC_STASH_URL = os.environ.get("PUBLIC_STASH_URL", STASH_URL).rstrip("/")
+PUBLIC_BRIDGE_URL = os.environ.get("PUBLIC_BRIDGE_URL", "").rstrip("/")
 STASH_API_KEY = os.environ.get("STASH_API_KEY", "")
 HOST = os.environ.get("PLAYA_BRIDGE_HOST", "0.0.0.0")
 PORT = int(os.environ.get("PLAYA_BRIDGE_PORT", "8890"))
@@ -152,11 +153,15 @@ def quality_for_scene(scene):
     return "Source", 25
 
 
-def stream_url(scene):
+def stash_stream_url(scene):
     paths = scene.get("paths") or {}
     if paths.get("stream"):
         return absolute_url(paths.get("stream"))
     return with_api_key(f"{PUBLIC_STASH_URL}/scene/{scene.get('id')}/stream")
+
+
+def stream_url(scene, bridge_base_url):
+    return f"{bridge_base_url}/api/playa/v2/stream/{scene.get('id')}"
 
 
 def video_list_view(scene):
@@ -184,7 +189,7 @@ def video_list_view(scene):
     }
 
 
-def video_view(scene):
+def video_view(scene, bridge_base_url):
     projection, stereo = infer_projection_and_stereo(scene)
     quality_name, quality_order = quality_for_scene(scene)
     file_info = (scene.get("files") or [{}])[0] or {}
@@ -212,7 +217,7 @@ def video_view(scene):
                     {
                         "is_stream": True,
                         "is_download": True,
-                        "url": stream_url(scene),
+                        "url": stream_url(scene, bridge_base_url),
                         "projection": projection,
                         "stereo": stereo,
                         "quality_name": quality_name,
@@ -349,7 +354,7 @@ def find_scenes_by_scan(find_filter, relation_filters, page_index, page_size):
     return page_response(page_index, page_size, len(matches), [video_list_view(scene) for scene in page_matches])
 
 
-def get_scene(scene_id):
+def get_scene(scene_id, bridge_base_url):
     data = graphql(
         f"""
         query PlayaScene($id: ID!) {{
@@ -361,7 +366,22 @@ def get_scene(scene_id):
     scene = data.get("findScene")
     if not scene:
         return None
-    return video_view(scene)
+    return video_view(scene, bridge_base_url)
+
+
+def get_scene_for_stream(scene_id):
+    data = graphql(
+        """
+        query PlayaStreamScene($id: ID!) {
+          findScene(id: $id) {
+            id
+            paths { stream }
+          }
+        }
+        """,
+        {"id": str(scene_id)},
+    )
+    return data.get("findScene")
 
 
 def find_people(params, kind):
@@ -452,6 +472,12 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    def bridge_base_url(self):
+        if PUBLIC_BRIDGE_URL:
+            return PUBLIC_BRIDGE_URL
+        host = self.headers.get("Host") or f"{self.server.server_address[0]}:{self.server.server_address[1]}"
+        return f"http://{host}".rstrip("/")
+
     def read_json(self):
         length = int(self.headers.get("Content-Length", "0") or 0)
         if not length:
@@ -471,6 +497,55 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "content-type, authorization")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
         self.end_headers()
+
+    def proxy_stream(self, scene_id, head_only=False):
+        scene = get_scene_for_stream(scene_id)
+        if not scene:
+            self.send_json(fail("Video not found", 404), status=404)
+            return
+
+        target = stash_stream_url(scene)
+        headers = {}
+        if STASH_API_KEY:
+            headers["ApiKey"] = STASH_API_KEY
+        if self.headers.get("Range"):
+            headers["Range"] = self.headers.get("Range")
+        request = urllib.request.Request(target, headers=headers, method="HEAD" if head_only else "GET")
+        try:
+            response = urllib.request.urlopen(request, timeout=60)
+        except urllib.error.HTTPError as error:
+            details = error.read().decode("utf-8", errors="replace")
+            log(f"stream error scene={scene_id} status={error.code}: {details[:500]}")
+            self.send_response(error.code)
+            self.end_headers()
+            return
+
+        status = response.getcode()
+        self.send_response(status)
+        passthrough_headers = [
+            "Content-Type",
+            "Content-Length",
+            "Content-Range",
+            "Accept-Ranges",
+            "Last-Modified",
+            "ETag",
+        ]
+        for name in passthrough_headers:
+            value = response.headers.get(name)
+            if value:
+                self.send_header(name, value)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        if head_only:
+            response.close()
+            return
+
+        while True:
+            chunk = response.read(1024 * 1024)
+            if not chunk:
+                break
+            self.wfile.write(chunk)
+        response.close()
 
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
@@ -503,8 +578,10 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/videos":
                 self.send_json(ok(find_scenes(params)))
             elif path.startswith("/video/"):
-                video = get_scene(path.split("/")[-1])
+                video = get_scene(path.split("/")[-1], self.bridge_base_url())
                 self.send_json(ok(video) if video else fail("Video not found", 404))
+            elif path.startswith("/stream/"):
+                self.proxy_stream(path.split("/")[-1])
             elif path == "/actors":
                 self.send_json(ok(find_people(params, "actors")))
             elif path.startswith("/actor/"):
@@ -526,6 +603,19 @@ class Handler(BaseHTTPRequestHandler):
         except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError) as error:
             log(f"request failed path={path}: {error}")
             self.send_json(fail(error))
+
+    def do_HEAD(self):
+        path = self.playa_path()
+        try:
+            if path.startswith("/stream/"):
+                self.proxy_stream(path.split("/")[-1], head_only=True)
+            else:
+                self.send_response(404)
+                self.end_headers()
+        except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError) as error:
+            log(f"head failed path={path}: {error}")
+            self.send_response(500)
+            self.end_headers()
 
     def do_POST(self):
         self.route_write()

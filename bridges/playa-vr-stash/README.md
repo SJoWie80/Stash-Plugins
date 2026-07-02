@@ -9,6 +9,7 @@ PLAY'A does not talk to a Stash UI plugin directly. In PLAY'A you add this bridg
 ```powershell
 $env:STASH_URL = "http://192.168.101.4:30198"
 $env:STASH_API_KEY = ""
+$env:PUBLIC_BRIDGE_URL = "http://192.168.101.4:8890"
 $env:PLAYA_BRIDGE_HOST = "0.0.0.0"
 $env:PLAYA_BRIDGE_PORT = "8890"
 python .\playa_vr_stash.py
@@ -31,6 +32,7 @@ The bridge serves PLAY'A under `/api/playa/v2`, but PLAY'A only needs the host U
 | `PLAYA_BRIDGE_HOST` | `0.0.0.0` | Bind address. |
 | `PLAYA_BRIDGE_PORT` | `8890` | Bridge HTTP port. |
 | `PUBLIC_STASH_URL` | `STASH_URL` | Optional Stash URL returned to PLAY'A for images and streams. |
+| `PUBLIC_BRIDGE_URL` | request host | Optional bridge URL returned to PLAY'A for proxied video streams. |
 | `PLAYA_SCAN_PAGE_SIZE` | `250` | Internal page size used when filtering videos by studio, actor, or tag. |
 | `PLAYA_SCAN_MAX_PAGES` | `200` | Maximum internal pages scanned for filtered PLAY'A views. |
 
@@ -43,7 +45,7 @@ If `STASH_API_KEY` is set, the bridge adds `apikey` to Stash media URLs so PLAY'
 - Browse Stash studios as PLAY'A studios.
 - Browse Stash performers as PLAY'A actors.
 - Browse Stash tags as PLAY'A categories.
-- Stream scenes through Stash scene stream URLs with HTTP range support handled by Stash.
+- Stream scenes through the bridge with HTTP range requests proxied to Stash.
 - Basic VR format inference from scene title, path, and tags.
 
 This is an initial bridge. Metadata write-back from PLAY'A events can be added later.

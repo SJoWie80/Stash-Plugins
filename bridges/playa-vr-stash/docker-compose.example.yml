@@ -7,6 +7,7 @@ services:
     environment:
       STASH_URL: "http://192.168.101.4:30198"
       PUBLIC_STASH_URL: "http://192.168.101.4:30198"
+      PUBLIC_BRIDGE_URL: "http://192.168.101.4:8890"
       STASH_API_KEY: ""
       PLAYA_BRIDGE_HOST: "0.0.0.0"
       PLAYA_BRIDGE_PORT: "8890"

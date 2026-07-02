@@ -37,11 +37,11 @@ DEFAULT_STEREO = os.environ.get("PLAYA_DEFAULT_STEREO", "LR").upper()
 SHOW_VIDEO_STATUS = os.environ.get("PLAYA_SHOW_VIDEO_STATUS", "false").lower() in {"1", "true", "yes", "on"}
 SUPPORTED_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg"}
 IMAGE_TILE_SIZE = int(os.environ.get("PLAYA_IMAGE_TILE_SIZE", "512"))
-IMAGE_PROXY_VERSION = "3"
+IMAGE_PROXY_VERSION = "4"
 IMAGE_SHAPES = {
     "square": (IMAGE_TILE_SIZE, IMAGE_TILE_SIZE),
     "portrait": (IMAGE_TILE_SIZE, int(IMAGE_TILE_SIZE * 1.35)),
-    "wide": (int(IMAGE_TILE_SIZE * 1.75), IMAGE_TILE_SIZE),
+    "wide": (IMAGE_TILE_SIZE * 3, IMAGE_TILE_SIZE),
 }
 
 

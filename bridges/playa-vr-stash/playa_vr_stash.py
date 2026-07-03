@@ -41,6 +41,7 @@ IMAGE_PROXY_VERSION = "5"
 IMAGE_SHAPES = {
     "square": (IMAGE_TILE_SIZE, IMAGE_TILE_SIZE),
     "portrait": (IMAGE_TILE_SIZE, int(IMAGE_TILE_SIZE * 1.35)),
+    "video": (IMAGE_TILE_SIZE, int(IMAGE_TILE_SIZE * 9 / 16)),
 }
 
 
@@ -222,10 +223,10 @@ def scene_preview_image(scene, bridge_base_url):
     paths = scene.get("paths") or {}
     for key in ("screenshot", "webp"):
         if paths.get(key):
-            return preview_url(paths.get(key), bridge_base_url)
+            return preview_url(paths.get(key), bridge_base_url, "video")
     scene_id = scene.get("id")
     if scene_id:
-        return preview_url(f"{PUBLIC_STASH_URL}/scene/{scene_id}/screenshot", bridge_base_url)
+        return preview_url(f"{PUBLIC_STASH_URL}/scene/{scene_id}/screenshot", bridge_base_url, "video")
     return None
 
 

@@ -218,18 +218,18 @@ def stream_url(scene, bridge_base_url):
     return f"{bridge_base_url}/api/playa/v2/stream/{scene.get('id')}"
 
 
-def scene_preview_image(scene):
+def scene_preview_image(scene, bridge_base_url):
     paths = scene.get("paths") or {}
     for key in ("screenshot", "webp"):
         if paths.get(key):
-            return absolute_url(paths.get(key))
+            return preview_url(paths.get(key), bridge_base_url)
     scene_id = scene.get("id")
     if scene_id:
-        return with_api_key(f"{PUBLIC_STASH_URL}/scene/{scene_id}/screenshot")
+        return preview_url(f"{PUBLIC_STASH_URL}/scene/{scene_id}/screenshot", bridge_base_url)
     return None
 
 
-def video_list_view(scene):
+def video_list_view(scene, bridge_base_url):
     projection, stereo = infer_projection_and_stereo(scene)
     duration = duration_seconds(scene)
     performers = names(scene.get("performers"))
@@ -239,7 +239,7 @@ def video_list_view(scene):
         "id": str(scene.get("id")),
         "title": scene_title(scene),
         "subtitle": subtitle,
-        "preview_image": scene_preview_image(scene),
+        "preview_image": scene_preview_image(scene, bridge_base_url),
         "release_date": unix_date(scene.get("date")),
         "has_scripts": False,
         "details": [
@@ -268,7 +268,7 @@ def video_view(scene, bridge_base_url):
         "title": scene_title(scene),
         "subtitle": studio.get("name") if studio else "",
         "description": scene.get("details") or "",
-        "preview_image": scene_preview_image(scene),
+        "preview_image": scene_preview_image(scene, bridge_base_url),
         "release_date": unix_date(scene.get("date")),
         "studio": {"id": str(studio.get("id")), "title": studio.get("name")} if studio else None,
         "categories": [{"id": str(tag.get("id")), "title": tag.get("name")} for tag in tags],
@@ -312,7 +312,7 @@ SCENE_FIELDS = """
 """
 
 
-def find_scenes(params):
+def find_scenes(params, bridge_base_url):
     page_index = max(0, int(params.get("page-index", ["0"])[0] or 0))
     page_size = min(PAGE_SIZE_MAX, max(1, int(params.get("page-size", ["30"])[0] or 30)))
     order = params.get("order", [""])[0]
@@ -334,7 +334,7 @@ def find_scenes(params):
         "excluded_categories": [value for value in str(params.get("excluded-categories", [""])[0] or "").split(",") if value],
     }
     if any(relation_filters.values()):
-        return find_scenes_by_scan(find_filter, relation_filters, page_index, page_size)
+        return find_scenes_by_scan(find_filter, relation_filters, page_index, page_size, bridge_base_url)
 
     data = graphql(
         f"""
@@ -351,7 +351,7 @@ def find_scenes(params):
     scenes = result.get("scenes") or []
     total = int(result.get("count") or 0)
     log(f"videos page={page_index} size={page_size} filters=none returned={len(scenes)} total={total}")
-    return page_response(page_index, page_size, total, [video_list_view(scene) for scene in scenes])
+    return page_response(page_index, page_size, total, [video_list_view(scene, bridge_base_url) for scene in scenes])
 
 
 def scene_matches(scene, relation_filters):
@@ -377,7 +377,7 @@ def scene_matches(scene, relation_filters):
     return True
 
 
-def find_scenes_by_scan(find_filter, relation_filters, page_index, page_size):
+def find_scenes_by_scan(find_filter, relation_filters, page_index, page_size, bridge_base_url):
     matches = []
     scanned = 0
     total = 0
@@ -420,7 +420,7 @@ def find_scenes_by_scan(find_filter, relation_filters, page_index, page_size):
             len(matches),
         )
     )
-    return page_response(page_index, page_size, len(matches), [video_list_view(scene) for scene in page_matches])
+    return page_response(page_index, page_size, len(matches), [video_list_view(scene, bridge_base_url) for scene in page_matches])
 
 
 def get_scene(scene_id, bridge_base_url):
@@ -802,7 +802,7 @@ class Handler(BaseHTTPRequestHandler):
                     )
                 )
             elif path == "/videos":
-                self.send_json(ok(find_scenes(params)))
+                self.send_json(ok(find_scenes(params, self.bridge_base_url())))
             elif path.startswith("/video/"):
                 video = get_scene(path.split("/")[-1], self.bridge_base_url())
                 self.send_json(ok(video) if video else fail("Video not found", 404))

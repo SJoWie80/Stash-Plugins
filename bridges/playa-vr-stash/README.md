@@ -61,6 +61,7 @@ services:
       PLAYA_DEFAULT_STEREO: "LR"
       PLAYA_SHOW_VIDEO_STATUS: "false"
       PLAYA_IMAGE_TILE_SIZE: "512"
+      PLAYA_SITE_LOGO: ""
 ```
 
 ## TrueNAS Custom App YAML
@@ -91,6 +92,7 @@ services:
       PLAYA_DEFAULT_STEREO: 'LR'
       PLAYA_SHOW_VIDEO_STATUS: 'false'
       PLAYA_IMAGE_TILE_SIZE: '512'
+      PLAYA_SITE_LOGO: ''
     ports:
       - '8890:8890'
     restart: unless-stopped
@@ -114,6 +116,7 @@ For TrueNAS, use addresses that are reachable from inside the bridge container. 
 | `PLAYA_SCAN_MAX_PAGES` | `200` | Maximum internal pages scanned. |
 | `PLAYA_SHOW_VIDEO_STATUS` | `false` | Show PLAY'A video status badges such as `Published`. |
 | `PLAYA_IMAGE_TILE_SIZE` | `512` | Base size for generated thumbnails. |
+| `PLAYA_SITE_LOGO` | generated bridge logo | Optional absolute URL for a custom 256x256 transparent PNG logo shown on PLAY'A's website/home screen. |
 
 ## Health Check
 

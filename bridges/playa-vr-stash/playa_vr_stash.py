@@ -12,9 +12,11 @@ from io import BytesIO
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 try:
-    from PIL import Image, ImageOps
+    from PIL import Image, ImageDraw, ImageFont, ImageOps
 except Exception:
     Image = None
+    ImageDraw = None
+    ImageFont = None
     ImageOps = None
 
 try:
@@ -29,6 +31,7 @@ PUBLIC_BRIDGE_URL = os.environ.get("PUBLIC_BRIDGE_URL", "").rstrip("/")
 STASH_API_KEY = os.environ.get("STASH_API_KEY", "")
 HOST = os.environ.get("PLAYA_BRIDGE_HOST", "0.0.0.0")
 PORT = int(os.environ.get("PLAYA_BRIDGE_PORT", "8890"))
+SITE_LOGO_URL = os.environ.get("PLAYA_SITE_LOGO", "").strip()
 PAGE_SIZE_MAX = 100
 SCAN_PAGE_SIZE = int(os.environ.get("PLAYA_SCAN_PAGE_SIZE", "250"))
 SCAN_MAX_PAGES = int(os.environ.get("PLAYA_SCAN_MAX_PAGES", "200"))
@@ -112,6 +115,10 @@ def preview_url(value, bridge_base_url, shape="square"):
         return None
     source = absolute_url(value)
     return f"{bridge_base_url}/api/playa/v2/image?v={IMAGE_PROXY_VERSION}&shape={shape}&url={urllib.parse.quote(source, safe='')}"
+
+
+def site_logo_url(bridge_base_url):
+    return SITE_LOGO_URL or f"{bridge_base_url}/api/playa/v2/logo.png"
 
 
 def trim_transparent(image):
@@ -617,6 +624,32 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(raw)
 
+    def send_logo(self):
+        if Image is None or ImageDraw is None:
+            self.send_response(404)
+            self.end_headers()
+            return
+
+        size = 256
+        image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+        draw.rounded_rectangle((18, 18, 238, 238), radius=48, fill=(22, 28, 34, 255), outline=(42, 174, 113, 255), width=6)
+        draw.ellipse((76, 44, 180, 148), fill=(42, 174, 113, 255))
+        draw.rectangle((91, 122, 165, 194), fill=(42, 174, 113, 255))
+        draw.text((94, 84), "S", fill=(255, 255, 255, 255), font=ImageFont.load_default() if ImageFont else None)
+        draw.text((84, 204), "STASH", fill=(255, 255, 255, 255), font=ImageFont.load_default() if ImageFont else None)
+
+        output = BytesIO()
+        image.save(output, format="PNG", optimize=True)
+        body = output.getvalue()
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "public, max-age=86400")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        self.wfile.write(body)
+
     def health(self):
         payload = {
             "bridge": "ok",
@@ -788,6 +821,7 @@ class Handler(BaseHTTPRequestHandler):
                     ok(
                         {
                             "site_name": "Stash",
+                            "site_logo": site_logo_url(self.bridge_base_url()),
                             "auth": False,
                             "auth_by_code": False,
                             "actors": True,
@@ -802,6 +836,8 @@ class Handler(BaseHTTPRequestHandler):
                         }
                     )
                 )
+            elif path == "/logo.png":
+                self.send_logo()
             elif path == "/videos":
                 self.send_json(ok(find_scenes(params, self.bridge_base_url())))
             elif path.startswith("/video/"):

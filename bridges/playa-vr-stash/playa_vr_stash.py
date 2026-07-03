@@ -12,11 +12,9 @@ from io import BytesIO
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 try:
-    from PIL import Image, ImageDraw, ImageFont, ImageOps
+    from PIL import Image, ImageOps
 except Exception:
     Image = None
-    ImageDraw = None
-    ImageFont = None
     ImageOps = None
 
 try:
@@ -32,6 +30,13 @@ STASH_API_KEY = os.environ.get("STASH_API_KEY", "")
 HOST = os.environ.get("PLAYA_BRIDGE_HOST", "0.0.0.0")
 PORT = int(os.environ.get("PLAYA_BRIDGE_PORT", "8890"))
 SITE_LOGO_URL = os.environ.get("PLAYA_SITE_LOGO", "").strip()
+SITE_LOGO_PATH = os.environ.get("PLAYA_SITE_LOGO_PATH", "/app/assets/stash.png")
+PASSTHROUGH_TAG_NAMES = {
+    value.strip().lower()
+    for value in os.environ.get("PLAYA_PASSTHROUGH_TAGS", "Passthrough").split(",")
+    if value.strip()
+}
+PASSTHROUGH_MODE = int(os.environ.get("PLAYA_PASSTHROUGH_MODE", "1"))
 PAGE_SIZE_MAX = 100
 SCAN_PAGE_SIZE = int(os.environ.get("PLAYA_SCAN_PAGE_SIZE", "250"))
 SCAN_MAX_PAGES = int(os.environ.get("PLAYA_SCAN_MAX_PAGES", "200"))
@@ -215,6 +220,24 @@ def duration_seconds(scene):
     return max(1, int(float(file_info.get("duration") or 0)))
 
 
+def passthrough_mode(scene):
+    tag_names = {name.lower() for name in names(scene.get("tags"))}
+    if tag_names.intersection(PASSTHROUGH_TAG_NAMES):
+        return PASSTHROUGH_MODE
+    return 0
+
+
+def transparency_info(scene):
+    mode = passthrough_mode(scene)
+    if mode == 1:
+        return {"m": 1}
+    if mode == 2:
+        return {"m": 2, "i": False, "c": [{"e": True, "r": 0.2, "f": 0.5, "c": {"r": 18, "g": 218, "b": 0}, "h": 0.1, "s": -0.25, "v": -0.8}]}
+    if mode == 3:
+        return {"m": 3}
+    return {"m": 0}
+
+
 def stash_stream_url(scene):
     paths = scene.get("paths") or {}
     if paths.get("stream"):
@@ -240,6 +263,7 @@ def scene_preview_image(scene, bridge_base_url):
 def video_list_view(scene, bridge_base_url):
     projection, stereo = infer_projection_and_stereo(scene)
     duration = duration_seconds(scene)
+    transparency_mode = passthrough_mode(scene)
     performers = names(scene.get("performers"))
     studio = scene.get("studio") or {}
     subtitle = " - ".join([studio.get("name") or "", ", ".join(performers[:3])]).strip(" -")
@@ -254,7 +278,7 @@ def video_list_view(scene, bridge_base_url):
             {
                 "type": "full",
                 "duration_seconds": duration,
-                "transparency_mode": 0,
+                "transparency_mode": transparency_mode,
                 "has_scripts": False,
             }
         ],
@@ -282,7 +306,7 @@ def video_view(scene, bridge_base_url):
         "categories": [{"id": str(tag.get("id")), "title": tag.get("name")} for tag in tags],
         "actors": [{"id": str(actor.get("id")), "title": actor.get("name")} for actor in performers],
         "views": int(scene.get("play_count") or 0),
-        "transparency": {"m": 0},
+        "transparency": transparency_info(scene),
         "details": [
             {
                 "type": "full",
@@ -625,23 +649,14 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(raw)
 
     def send_logo(self):
-        if Image is None or ImageDraw is None:
+        try:
+            with open(SITE_LOGO_PATH, "rb") as logo:
+                body = logo.read()
+        except OSError:
             self.send_response(404)
             self.end_headers()
             return
 
-        size = 256
-        image = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(image)
-        draw.rounded_rectangle((18, 18, 238, 238), radius=48, fill=(22, 28, 34, 255), outline=(42, 174, 113, 255), width=6)
-        draw.ellipse((76, 44, 180, 148), fill=(42, 174, 113, 255))
-        draw.rectangle((91, 122, 165, 194), fill=(42, 174, 113, 255))
-        draw.text((94, 84), "S", fill=(255, 255, 255, 255), font=ImageFont.load_default() if ImageFont else None)
-        draw.text((84, 204), "STASH", fill=(255, 255, 255, 255), font=ImageFont.load_default() if ImageFont else None)
-
-        output = BytesIO()
-        image.save(output, format="PNG", optimize=True)
-        body = output.getvalue()
         self.send_response(200)
         self.send_header("Content-Type", "image/png")
         self.send_header("Content-Length", str(len(body)))
@@ -829,7 +844,7 @@ class Handler(BaseHTTPRequestHandler):
                             "categories_groups": True,
                             "studios": True,
                             "scripts": False,
-                            "masks": False,
+                            "masks": True,
                             "analytics": True,
                             "nsfw": False,
                             "ar": False,

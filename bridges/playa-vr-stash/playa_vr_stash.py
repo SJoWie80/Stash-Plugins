@@ -48,7 +48,11 @@ CHROMA_KEY_TAG_NAMES = {
     for value in os.environ.get("PLAYA_CHROMA_KEY_TAGS", "Chroma Key,Green Screen,Greenscreen").split(",")
     if value.strip()
 }
-CHROMA_KEY_COLOR = [int(value.strip()) for value in os.environ.get("PLAYA_CHROMA_KEY_COLOR", "18,218,0").split(",")[:3]]
+CHROMA_KEY_COLORS = [
+    [int(channel.strip()) for channel in color.split(",")[:3]]
+    for color in os.environ.get("PLAYA_CHROMA_KEY_COLORS", "18,218,0;190,0,255;255,0,0;0,80,255").split(";")
+    if color.strip()
+][:4]
 CHROMA_KEY_RANGE = float(os.environ.get("PLAYA_CHROMA_KEY_RANGE", "0.2"))
 CHROMA_KEY_SMOOTH = float(os.environ.get("PLAYA_CHROMA_KEY_SMOOTH", "0.5"))
 CHROMA_KEY_HUE = float(os.environ.get("PLAYA_CHROMA_KEY_HUE", "0.1"))
@@ -288,11 +292,13 @@ def transparency_info(scene):
                     "e": True,
                     "r": CHROMA_KEY_RANGE,
                     "f": CHROMA_KEY_SMOOTH,
-                    "c": {"r": CHROMA_KEY_COLOR[0], "g": CHROMA_KEY_COLOR[1], "b": CHROMA_KEY_COLOR[2]},
+                    "c": {"r": color[0], "g": color[1], "b": color[2]},
                     "h": CHROMA_KEY_HUE,
                     "s": CHROMA_KEY_SATURATION,
                     "v": CHROMA_KEY_BRIGHTNESS,
                 }
+                for color in CHROMA_KEY_COLORS
+                if len(color) == 3
             ],
         }
     if mode == 3:

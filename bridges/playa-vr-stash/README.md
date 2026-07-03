@@ -68,7 +68,7 @@ services:
       PLAYA_PASSTHROUGH_MODE: "1"
       PLAYA_CHROMA_KEY_STUDIOS: "CzechAR,Czech AR"
       PLAYA_CHROMA_KEY_TAGS: "Chroma Key,Green Screen,Greenscreen"
-      PLAYA_CHROMA_KEY_COLOR: "18,218,0"
+      PLAYA_CHROMA_KEY_COLORS: "18,218,0;190,0,255;255,0,0;0,80,255"
       PLAYA_CHROMA_KEY_RANGE: "0.2"
       PLAYA_CHROMA_KEY_SMOOTH: "0.5"
 ```
@@ -106,7 +106,7 @@ services:
       PLAYA_PASSTHROUGH_MODE: '1'
       PLAYA_CHROMA_KEY_STUDIOS: 'CzechAR,Czech AR'
       PLAYA_CHROMA_KEY_TAGS: 'Chroma Key,Green Screen,Greenscreen'
-      PLAYA_CHROMA_KEY_COLOR: '18,218,0'
+      PLAYA_CHROMA_KEY_COLORS: '18,218,0;190,0,255;255,0,0;0,80,255'
       PLAYA_CHROMA_KEY_RANGE: '0.2'
       PLAYA_CHROMA_KEY_SMOOTH: '0.5'
     ports:
@@ -137,7 +137,7 @@ For TrueNAS, use addresses that are reachable from inside the bridge container. 
 | `PLAYA_PASSTHROUGH_MODE` | `1` | PLAY'A transparency mode for passthrough-tagged scenes. Use `1` for embedded alpha mask or `2` for chroma key. |
 | `PLAYA_CHROMA_KEY_STUDIOS` | `CzechAR,Czech AR` | Passthrough scenes from these studios use chroma key mode instead of embedded alpha. |
 | `PLAYA_CHROMA_KEY_TAGS` | `Chroma Key,Green Screen,Greenscreen` | Scenes with these tags use chroma key mode even without a matching studio. |
-| `PLAYA_CHROMA_KEY_COLOR` | `18,218,0` | RGB green-screen color used for PLAY'A chroma key passthrough. |
+| `PLAYA_CHROMA_KEY_COLORS` | `18,218,0;190,0,255;255,0,0;0,80,255` | Semicolon-separated RGB chroma-key colors. PLAY'A supports up to four layers; defaults cover green, purple, red, and blue screens. |
 | `PLAYA_CHROMA_KEY_RANGE` | `0.2` | Chroma key range. Increase if green remains visible; decrease if model edges disappear. |
 | `PLAYA_CHROMA_KEY_SMOOTH` | `0.5` | Chroma key edge smoothing. Increase for softer transparent edges. |
 

@@ -40,12 +40,12 @@ PASSTHROUGH_MODE = int(os.environ.get("PLAYA_PASSTHROUGH_MODE", "1"))
 PASSTHROUGH_CATEGORY_ID = "__passthrough"
 CHROMA_KEY_STUDIO_NAMES = {
     value.strip().lower()
-    for value in os.environ.get("PLAYA_CHROMA_KEY_STUDIOS", "CzechAR,Czech AR").split(",")
+    for value in os.environ.get("PLAYA_CHROMA_KEY_STUDIOS", "").split(",")
     if value.strip()
 }
 CHROMA_KEY_TAG_NAMES = {
     value.strip().lower()
-    for value in os.environ.get("PLAYA_CHROMA_KEY_TAGS", "Chroma Key,Green Screen,Greenscreen").split(",")
+    for value in os.environ.get("PLAYA_CHROMA_KEY_TAGS", "Chroma,Chroma Key,Green Screen,Greenscreen").split(",")
     if value.strip()
 }
 CHROMA_KEY_COLORS = [

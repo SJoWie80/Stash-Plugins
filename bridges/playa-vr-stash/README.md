@@ -66,8 +66,8 @@ services:
       PLAYA_SITE_LOGO: ""
       PLAYA_PASSTHROUGH_TAGS: "Passthrough"
       PLAYA_PASSTHROUGH_MODE: "1"
-      PLAYA_CHROMA_KEY_STUDIOS: "CzechAR,Czech AR"
-      PLAYA_CHROMA_KEY_TAGS: "Chroma Key,Green Screen,Greenscreen"
+      PLAYA_CHROMA_KEY_STUDIOS: ""
+      PLAYA_CHROMA_KEY_TAGS: "Chroma,Chroma Key,Green Screen,Greenscreen"
       PLAYA_CHROMA_KEY_COLORS: "18,218,0;190,0,255;255,0,0;0,80,255"
       PLAYA_CHROMA_KEY_RANGE: "0.2"
       PLAYA_CHROMA_KEY_SMOOTH: "0.5"
@@ -104,8 +104,8 @@ services:
       PLAYA_SITE_LOGO: ''
       PLAYA_PASSTHROUGH_TAGS: 'Passthrough'
       PLAYA_PASSTHROUGH_MODE: '1'
-      PLAYA_CHROMA_KEY_STUDIOS: 'CzechAR,Czech AR'
-      PLAYA_CHROMA_KEY_TAGS: 'Chroma Key,Green Screen,Greenscreen'
+      PLAYA_CHROMA_KEY_STUDIOS: ''
+      PLAYA_CHROMA_KEY_TAGS: 'Chroma,Chroma Key,Green Screen,Greenscreen'
       PLAYA_CHROMA_KEY_COLORS: '18,218,0;190,0,255;255,0,0;0,80,255'
       PLAYA_CHROMA_KEY_RANGE: '0.2'
       PLAYA_CHROMA_KEY_SMOOTH: '0.5'
@@ -135,8 +135,8 @@ For TrueNAS, use addresses that are reachable from inside the bridge container. 
 | `PLAYA_SITE_LOGO` | bundled Stash logo | Optional absolute URL for a custom 256x256 transparent PNG logo shown on PLAY'A's website/home screen. |
 | `PLAYA_PASSTHROUGH_TAGS` | `Passthrough` | Comma-separated Stash tag names that mark scenes as PLAY'A passthrough/AR videos. |
 | `PLAYA_PASSTHROUGH_MODE` | `1` | PLAY'A transparency mode for passthrough-tagged scenes. Use `1` for embedded alpha mask or `2` for chroma key. |
-| `PLAYA_CHROMA_KEY_STUDIOS` | `CzechAR,Czech AR` | Passthrough scenes from these studios use chroma key mode instead of embedded alpha. |
-| `PLAYA_CHROMA_KEY_TAGS` | `Chroma Key,Green Screen,Greenscreen` | Scenes with these tags use chroma key mode even without a matching studio. |
+| `PLAYA_CHROMA_KEY_STUDIOS` | empty | Optional comma-separated studio names whose passthrough scenes always use chroma key mode. Prefer tags for mixed studios. |
+| `PLAYA_CHROMA_KEY_TAGS` | `Chroma,Chroma Key,Green Screen,Greenscreen` | Scenes with these tags use chroma key mode. This is best for studios that only have some AR/chroma scenes. |
 | `PLAYA_CHROMA_KEY_COLORS` | `18,218,0;190,0,255;255,0,0;0,80,255` | Semicolon-separated RGB chroma-key colors. PLAY'A supports up to four layers; defaults cover green, purple, red, and blue screens. |
 | `PLAYA_CHROMA_KEY_RANGE` | `0.2` | Chroma key range. Increase if green remains visible; decrease if model edges disappear. |
 | `PLAYA_CHROMA_KEY_SMOOTH` | `0.5` | Chroma key edge smoothing. Increase for softer transparent edges. |

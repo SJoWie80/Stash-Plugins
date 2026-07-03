@@ -13,6 +13,8 @@ PLAY'A does not connect to a normal Stash UI plugin. In PLAY'A you add this brid
 
 - Browse Stash scenes in PLAY'A as videos.
 - Browse and filter by studios, performers, and tags.
+- Filter videos by favorites, organized, watched, unwatched, rated, and passthrough status.
+- Adds a Passthrough category/channel backed by the configured Stash passthrough tag.
 - Sort studios by the number of linked scenes, highest first.
 - Play Stash scenes in PLAY'A through a bridge stream proxy with HTTP range support.
 - Supports SBS and over-under VR playback metadata.
@@ -123,6 +125,17 @@ For TrueNAS, use addresses that are reachable from inside the bridge container. 
 | `PLAYA_SITE_LOGO` | bundled Stash logo | Optional absolute URL for a custom 256x256 transparent PNG logo shown on PLAY'A's website/home screen. |
 | `PLAYA_PASSTHROUGH_TAGS` | `Passthrough` | Comma-separated Stash tag names that mark scenes as PLAY'A passthrough/AR videos. |
 | `PLAYA_PASSTHROUGH_MODE` | `1` | PLAY'A transparency mode for passthrough-tagged scenes. Use `1` for embedded alpha mask or `2` for chroma key. |
+
+## Video Filters
+
+The bridge exposes PLAY'A video statuses for common Stash library filters:
+
+- `Favorites` maps to Stash `rating100 >= 100`.
+- `Rated` maps to Stash `rating100 > 0`.
+- `Organized` maps to Stash `organized`.
+- `Watched` maps to Stash `play_count > 0`.
+- `Unwatched` maps to Stash `play_count == 0`.
+- `Passthrough` maps to scenes with one of the configured `PLAYA_PASSTHROUGH_TAGS`.
 
 ## Health Check
 

@@ -37,6 +37,7 @@ PASSTHROUGH_TAG_NAMES = {
     if value.strip()
 }
 PASSTHROUGH_MODE = int(os.environ.get("PLAYA_PASSTHROUGH_MODE", "1"))
+PASSTHROUGH_CATEGORY_ID = "__passthrough"
 PAGE_SIZE_MAX = 100
 SCAN_PAGE_SIZE = int(os.environ.get("PLAYA_SCAN_PAGE_SIZE", "250"))
 SCAN_MAX_PAGES = int(os.environ.get("PLAYA_SCAN_MAX_PAGES", "200"))
@@ -227,6 +228,31 @@ def passthrough_mode(scene):
     return 0
 
 
+def is_passthrough(scene):
+    return passthrough_mode(scene) > 0
+
+
+def scene_status_ids(scene):
+    rating = int(scene.get("rating100") or 0)
+    play_count = int(scene.get("play_count") or 0)
+    statuses = set()
+    if SHOW_VIDEO_STATUS:
+        statuses.add("published")
+    if rating >= 100:
+        statuses.add("favorite")
+    if rating > 0:
+        statuses.add("rated")
+    if scene.get("organized"):
+        statuses.add("organized")
+    if play_count > 0:
+        statuses.add("watched")
+    else:
+        statuses.add("unwatched")
+    if is_passthrough(scene):
+        statuses.add("passthrough")
+    return statuses
+
+
 def transparency_info(scene):
     mode = passthrough_mode(scene)
     if mode == 1:
@@ -336,6 +362,8 @@ SCENE_FIELDS = """
   details
   date
   play_count
+  rating100
+  organized
   paths { screenshot stream webp }
   files { path basename }
   studio { id name }
@@ -364,6 +392,8 @@ def find_scenes(params, bridge_base_url):
         "actor": str(params.get("actor", [""])[0] or ""),
         "included_categories": [value for value in str(params.get("included-categories", [""])[0] or "").split(",") if value],
         "excluded_categories": [value for value in str(params.get("excluded-categories", [""])[0] or "").split(",") if value],
+        "included_statuses": [value for value in str(params.get("included-statuses", [""])[0] or "").split(",") if value],
+        "excluded_statuses": [value for value in str(params.get("excluded-statuses", [""])[0] or "").split(",") if value],
     }
     if any(relation_filters.values()):
         return find_scenes_by_scan(find_filter, relation_filters, page_index, page_size, bridge_base_url)
@@ -391,6 +421,8 @@ def scene_matches(scene, relation_filters):
     actor_id = relation_filters["actor"]
     included = set(relation_filters["included_categories"])
     excluded = set(relation_filters["excluded_categories"])
+    included_statuses = set(relation_filters["included_statuses"])
+    excluded_statuses = set(relation_filters["excluded_statuses"])
 
     studio = scene.get("studio") or {}
     if studio_id and str(studio.get("id")) != studio_id:
@@ -401,9 +433,23 @@ def scene_matches(scene, relation_filters):
         return False
 
     tag_ids = ids(scene.get("tags"))
+    if PASSTHROUGH_CATEGORY_ID in included:
+        if not is_passthrough(scene):
+            return False
+        included.remove(PASSTHROUGH_CATEGORY_ID)
+    if PASSTHROUGH_CATEGORY_ID in excluded:
+        if is_passthrough(scene):
+            return False
+        excluded.remove(PASSTHROUGH_CATEGORY_ID)
     if included and not included.issubset(tag_ids):
         return False
     if excluded and excluded.intersection(tag_ids):
+        return False
+
+    status_ids = scene_status_ids(scene)
+    if included_statuses and not included_statuses.intersection(status_ids):
+        return False
+    if excluded_statuses and excluded_statuses.intersection(status_ids):
         return False
 
     return True
@@ -626,11 +672,25 @@ def get_categories(bridge_base_url):
         {"filter": {"page": 1, "per_page": 1000, "sort": "name", "direction": "ASC"}},
     )
     tags = ((data.get("findTags") or {}).get("tags") or [])
-    content = []
+    content = [{"id": PASSTHROUGH_CATEGORY_ID, "title": "Passthrough", "preview": None}]
     for tag in tags:
         preview = preview_url(tag.get("image_path"), bridge_base_url)
         content.append({"id": str(tag.get("id")), "title": tag.get("name"), "preview": preview})
     return content
+
+
+def get_video_statuses():
+    statuses = [
+        {"id": "favorite", "title": "Favorites"},
+        {"id": "organized", "title": "Organized"},
+        {"id": "watched", "title": "Watched"},
+        {"id": "unwatched", "title": "Unwatched"},
+        {"id": "rated", "title": "Rated"},
+        {"id": "passthrough", "title": "Passthrough"},
+    ]
+    if SHOW_VIDEO_STATUS:
+        statuses.insert(0, {"id": "published", "title": "Published"})
+    return statuses
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -877,7 +937,7 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/categories-groups":
                 self.send_json(ok([{"id": "stash-tags", "title": "Tags", "items": get_categories(self.bridge_base_url())}]))
             elif path == "/video-statuses":
-                self.send_json(ok([{"id": "published", "title": "Published"}] if SHOW_VIDEO_STATUS else []))
+                self.send_json(ok(get_video_statuses()))
             else:
                 self.send_json(fail("Route not found", 404), status=404)
         except (urllib.error.URLError, TimeoutError, RuntimeError, ValueError) as error:

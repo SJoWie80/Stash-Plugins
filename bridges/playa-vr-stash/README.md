@@ -152,6 +152,15 @@ The bridge exposes PLAY'A video statuses for common Stash library filters:
 - `Unwatched` maps to Stash `play_count == 0`.
 - `Passthrough` maps to scenes with one of the configured `PLAYA_PASSTHROUGH_TAGS`.
 
+## Passthrough Tags
+
+Use Stash tags to choose the PLAY'A passthrough mode per scene:
+
+- `Passthrough` enables PLAY'A mode `1`: embedded alpha mask. Use this for AR videos where the file already contains the transparency mask, such as AR Porn style videos.
+- `Passthrough` + `Chroma` enables PLAY'A mode `2`: chroma key. Use this for green-screen, purple-screen, red-screen, or blue-screen AR videos.
+
+The `Chroma` tag only changes passthrough scenes. A normal scene with only `Chroma` is treated as chroma key too, but the clean setup is to use both tags on AR chroma-key scenes.
+
 ## Health Check
 
 Open this URL in a browser:

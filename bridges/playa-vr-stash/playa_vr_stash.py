@@ -38,6 +38,22 @@ PASSTHROUGH_TAG_NAMES = {
 }
 PASSTHROUGH_MODE = int(os.environ.get("PLAYA_PASSTHROUGH_MODE", "1"))
 PASSTHROUGH_CATEGORY_ID = "__passthrough"
+CHROMA_KEY_STUDIO_NAMES = {
+    value.strip().lower()
+    for value in os.environ.get("PLAYA_CHROMA_KEY_STUDIOS", "CzechAR,Czech AR").split(",")
+    if value.strip()
+}
+CHROMA_KEY_TAG_NAMES = {
+    value.strip().lower()
+    for value in os.environ.get("PLAYA_CHROMA_KEY_TAGS", "Chroma Key,Green Screen,Greenscreen").split(",")
+    if value.strip()
+}
+CHROMA_KEY_COLOR = [int(value.strip()) for value in os.environ.get("PLAYA_CHROMA_KEY_COLOR", "18,218,0").split(",")[:3]]
+CHROMA_KEY_RANGE = float(os.environ.get("PLAYA_CHROMA_KEY_RANGE", "0.2"))
+CHROMA_KEY_SMOOTH = float(os.environ.get("PLAYA_CHROMA_KEY_SMOOTH", "0.5"))
+CHROMA_KEY_HUE = float(os.environ.get("PLAYA_CHROMA_KEY_HUE", "0.1"))
+CHROMA_KEY_SATURATION = float(os.environ.get("PLAYA_CHROMA_KEY_SATURATION", "-0.25"))
+CHROMA_KEY_BRIGHTNESS = float(os.environ.get("PLAYA_CHROMA_KEY_BRIGHTNESS", "-0.8"))
 PAGE_SIZE_MAX = 100
 SCAN_PAGE_SIZE = int(os.environ.get("PLAYA_SCAN_PAGE_SIZE", "250"))
 SCAN_MAX_PAGES = int(os.environ.get("PLAYA_SCAN_MAX_PAGES", "200"))
@@ -223,7 +239,13 @@ def duration_seconds(scene):
 
 def passthrough_mode(scene):
     tag_names = {name.lower() for name in names(scene.get("tags"))}
+    studio = scene.get("studio") or {}
+    studio_name = (studio.get("name") or "").lower()
+    if tag_names.intersection(CHROMA_KEY_TAG_NAMES):
+        return 2
     if tag_names.intersection(PASSTHROUGH_TAG_NAMES):
+        if studio_name in CHROMA_KEY_STUDIO_NAMES:
+            return 2
         return PASSTHROUGH_MODE
     return 0
 
@@ -258,7 +280,21 @@ def transparency_info(scene):
     if mode == 1:
         return {"m": 1}
     if mode == 2:
-        return {"m": 2, "i": False, "c": [{"e": True, "r": 0.2, "f": 0.5, "c": {"r": 18, "g": 218, "b": 0}, "h": 0.1, "s": -0.25, "v": -0.8}]}
+        return {
+            "m": 2,
+            "i": False,
+            "c": [
+                {
+                    "e": True,
+                    "r": CHROMA_KEY_RANGE,
+                    "f": CHROMA_KEY_SMOOTH,
+                    "c": {"r": CHROMA_KEY_COLOR[0], "g": CHROMA_KEY_COLOR[1], "b": CHROMA_KEY_COLOR[2]},
+                    "h": CHROMA_KEY_HUE,
+                    "s": CHROMA_KEY_SATURATION,
+                    "v": CHROMA_KEY_BRIGHTNESS,
+                }
+            ],
+        }
     if mode == 3:
         return {"m": 3}
     return {"m": 0}

@@ -218,6 +218,17 @@ def stream_url(scene, bridge_base_url):
     return f"{bridge_base_url}/api/playa/v2/stream/{scene.get('id')}"
 
 
+def scene_preview_image(scene):
+    paths = scene.get("paths") or {}
+    for key in ("screenshot", "webp"):
+        if paths.get(key):
+            return absolute_url(paths.get(key))
+    scene_id = scene.get("id")
+    if scene_id:
+        return with_api_key(f"{PUBLIC_STASH_URL}/scene/{scene_id}/screenshot")
+    return None
+
+
 def video_list_view(scene):
     projection, stereo = infer_projection_and_stereo(scene)
     duration = duration_seconds(scene)
@@ -228,7 +239,7 @@ def video_list_view(scene):
         "id": str(scene.get("id")),
         "title": scene_title(scene),
         "subtitle": subtitle,
-        "preview_image": absolute_url((scene.get("paths") or {}).get("screenshot")),
+        "preview_image": scene_preview_image(scene),
         "release_date": unix_date(scene.get("date")),
         "has_scripts": False,
         "details": [
@@ -257,7 +268,7 @@ def video_view(scene, bridge_base_url):
         "title": scene_title(scene),
         "subtitle": studio.get("name") if studio else "",
         "description": scene.get("details") or "",
-        "preview_image": absolute_url((scene.get("paths") or {}).get("screenshot")),
+        "preview_image": scene_preview_image(scene),
         "release_date": unix_date(scene.get("date")),
         "studio": {"id": str(studio.get("id")), "title": studio.get("name")} if studio else None,
         "categories": [{"id": str(tag.get("id")), "title": tag.get("name")} for tag in tags],
@@ -293,7 +304,7 @@ SCENE_FIELDS = """
   details
   date
   play_count
-  paths { screenshot stream }
+  paths { screenshot stream webp }
   files { path basename }
   studio { id name }
   performers { id name }
@@ -586,7 +597,7 @@ def get_categories(bridge_base_url):
     content = []
     for tag in tags:
         preview = preview_url(tag.get("image_path"), bridge_base_url)
-        content.append({"id": str(tag.get("id")), "title": "" if preview else tag.get("name"), "preview": preview})
+        content.append({"id": str(tag.get("id")), "title": tag.get("name"), "preview": preview})
     return content
 
 

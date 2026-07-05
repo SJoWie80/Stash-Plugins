@@ -196,13 +196,72 @@
 
 .stash-xw-timeline {
   background: #111418;
-  min-height: 620px;
+  min-height: 13rem;
   overflow: hidden;
+  position: relative;
 }
 
 .stash-xw-timeline iframe {
   display: block !important;
   max-width: 100% !important;
+}
+
+.stash-xw-fallback {
+  display: none;
+  padding: 1rem;
+}
+
+.stash-xw-timeline.is-fallback .twitter-timeline {
+  display: none;
+}
+
+.stash-xw-timeline.is-fallback .stash-xw-fallback {
+  display: block;
+}
+
+.stash-xw-fallback-title {
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+
+.stash-xw-fallback p {
+  color: #aeb6c2;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  margin: 0 0 0.85rem;
+}
+
+.stash-xw-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.stash-xw-open {
+  background: #d6dce5;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  color: #111418;
+  display: inline-flex;
+  font-weight: 700;
+  min-height: 2.1rem;
+  padding: 0.35rem 0.7rem;
+}
+
+.stash-xw-open:hover,
+.stash-xw-open:focus {
+  color: #111418;
+  text-decoration: none;
+}
+
+.stash-xw-open.secondary {
+  background: #2d3138;
+  color: #f3f4f6;
+}
+
+.stash-xw-open.secondary:hover,
+.stash-xw-open.secondary:focus {
+  color: #f3f4f6;
 }
 
 @media (max-width: 820px) {

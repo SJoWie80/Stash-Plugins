@@ -298,14 +298,31 @@
     const existing = document.querySelector('script[src="https://platform.twitter.com/widgets.js"]');
     if (existing && window.twttr && window.twttr.widgets) {
       window.twttr.widgets.load();
+      window.setTimeout(markUnhydratedTimelines, 2500);
       return;
     }
-    if (existing) return;
+    if (existing) {
+      window.setTimeout(markUnhydratedTimelines, 2500);
+      return;
+    }
     const script = document.createElement("script");
     script.async = true;
     script.charset = "utf-8";
     script.src = "https://platform.twitter.com/widgets.js";
+    script.onload = () => {
+      if (window.twttr && window.twttr.widgets) window.twttr.widgets.load();
+      window.setTimeout(markUnhydratedTimelines, 2500);
+    };
+    script.onerror = () => {
+      document.querySelectorAll(".stash-xw-timeline").forEach((node) => node.classList.add("is-fallback"));
+    };
     document.body.appendChild(script);
+  }
+
+  function markUnhydratedTimelines() {
+    document.querySelectorAll(".stash-xw-timeline").forEach((node) => {
+      if (!node.querySelector("iframe")) node.classList.add("is-fallback");
+    });
   }
 
   function renderToolbar(parent) {
@@ -354,6 +371,27 @@
     link.setAttribute("data-chrome", "noheader nofooter noborders transparent");
     link.setAttribute("data-height", "620");
     timelineWrap.appendChild(link);
+    const fallback = el("div", "stash-xw-fallback");
+    fallback.appendChild(el("div", "stash-xw-fallback-title", "X timeline kan hier niet worden ingeladen."));
+    fallback.appendChild(
+      el(
+        "p",
+        "",
+        "X blokkeert embeds soms door login, gevoelige-content waarschuwingen of de Stash browser-CSP. Open het profiel direct op X om de posts te bekijken."
+      )
+    );
+    const actions = el("div", "stash-xw-actions");
+    const open = el("a", "stash-xw-open", "Open op X");
+    open.href = `https://x.com/${entry.handle}`;
+    open.target = "_blank";
+    open.rel = "noreferrer";
+    const media = el("a", "stash-xw-open secondary", "Media");
+    media.href = `https://x.com/${entry.handle}/media`;
+    media.target = "_blank";
+    media.rel = "noreferrer";
+    actions.append(open, media);
+    fallback.appendChild(actions);
+    timelineWrap.appendChild(fallback);
     card.append(header, timelineWrap);
     parent.appendChild(card);
   }

@@ -3,6 +3,7 @@
 
   const ROUTE = "/tag-image-picker";
   const NAV_ID = "stash-tip-nav";
+  const SETTINGS_NAV_ID = "stash-tip-settings-nav";
   const LAUNCHER_ID = "stash-tip-launcher";
   const APP_ID = "stash-tip-root";
   const PAGE_SIZE = 250;
@@ -34,6 +35,10 @@
     previewImage: "",
     previewKey: "",
     previewLoading: false,
+    tagScrollTop: 0,
+    imagePresence: {},
+    missingScanRunning: false,
+    missingScanComplete: false,
     routeRegistered: false,
     routeContainer: null,
   };
@@ -172,6 +177,38 @@
     } catch (error) {
       console.error("[Tag Icon Studio] failed adding nav", error);
     }
+  }
+
+  function findSettingsNav() {
+    const labels = ["Plugins", "Interface", "Security", "Tools", "System"];
+    return Array.from(document.querySelectorAll("nav, aside, .nav, .navbar-nav, .list-group, [class*='settings'], [class*='Settings']")).find((node) => {
+      if (node.id === NAV_ID || node.id === SETTINGS_NAV_ID) return false;
+      const text = node.textContent || "";
+      return labels.filter((label) => text.includes(label)).length >= 2;
+    });
+  }
+
+  function addSettingsNav() {
+    try {
+      if (document.getElementById(SETTINGS_NAV_ID)) return;
+      const nav = findSettingsNav();
+      if (!nav) return;
+      const link = el("a", "nav-link list-group-item stash-tip-settings-button");
+      link.id = SETTINGS_NAV_ID;
+      link.href = ROUTE;
+      link.setAttribute("aria-label", "Tag Icon Studio");
+      link.appendChild(el("span", "fa fa-icons fas fa-shapes stash-tip-nav-icon"));
+      link.appendChild(el("span", "stash-tip-nav-text", "Tag Icon Studio"));
+      link.addEventListener("click", navigate);
+      nav.appendChild(link);
+    } catch (error) {
+      console.error("[Tag Icon Studio] failed adding settings nav", error);
+    }
+  }
+
+  function addMenuEntries() {
+    addNav();
+    addSettingsNav();
   }
 
   function removeLauncher() {
@@ -328,10 +365,68 @@
     return Number(tag.scene_count || 0) + Number(tag.scene_marker_count || 0) + Number(tag.image_count || 0);
   }
 
+  function hasKnownImage(tag) {
+    if (!tag) return false;
+    if (typeof state.imagePresence[tag.id] === "boolean") return state.imagePresence[tag.id];
+    if (!tag.image_path) return false;
+    if (String(tag.image_path).startsWith("data:")) return true;
+    return state.missingScanComplete ? true : null;
+  }
+
+  async function probeTagImage(tag) {
+    if (!tag || typeof state.imagePresence[tag.id] === "boolean") return;
+    if (!tag.image_path) {
+      state.imagePresence[tag.id] = false;
+      return;
+    }
+    if (String(tag.image_path).startsWith("data:")) {
+      state.imagePresence[tag.id] = true;
+      return;
+    }
+    try {
+      const response = await fetch(tag.image_path, {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      state.imagePresence[tag.id] = response.ok;
+    } catch (error) {
+      state.imagePresence[tag.id] = false;
+    }
+  }
+
+  async function scanMissingImages() {
+    if (state.missingScanRunning || state.missingScanComplete) return;
+    state.missingScanRunning = true;
+    state.status = "Checking missing tag images...";
+    render();
+    const tags = state.tags.slice();
+    let index = 0;
+    async function worker() {
+      while (index < tags.length) {
+        const tag = tags[index];
+        index += 1;
+        await probeTagImage(tag);
+      }
+    }
+    try {
+      await Promise.all(Array.from({ length: Math.min(8, tags.length) }, worker));
+      state.missingScanComplete = true;
+      state.status = "Missing image check complete";
+    } finally {
+      state.missingScanRunning = false;
+      render();
+    }
+  }
+
   function filteredTags() {
     const term = normalize(state.search);
     return state.tags
-      .filter((tag) => !state.onlyMissing || !tag.image_path)
+      .filter((tag) => {
+        if (!state.onlyMissing) return true;
+        const known = hasKnownImage(tag);
+        return known !== true;
+      })
       .filter((tag) => !term || normalize(tag.name).includes(term))
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   }
@@ -1334,6 +1429,7 @@
       const image = drawIcon(tag, state.style);
       const updated = await updateTagImage(tag.id, image);
       tag.image_path = (updated && updated.image_path) || image;
+      state.imagePresence[tag.id] = true;
       state.status = `Saved icon for ${tag.name}`;
     } catch (error) {
       state.error = error.message || String(error);
@@ -1356,6 +1452,7 @@
       const image = state.externalImage ? await composeExternalIcon(tag, state.externalImage, state.style) : drawIcon(tag, state.style);
       const updated = await updateTagImage(tag.id, image);
       tag.image_path = (updated && updated.image_path) || image;
+      state.imagePresence[tag.id] = true;
       state.status = `Saved icon for ${tag.name}`;
     } catch (error) {
       state.error = error.message || String(error);
@@ -1422,6 +1519,8 @@
     missingInput.addEventListener("change", () => {
       state.onlyMissing = missingInput.checked;
       state.tagPage = 1;
+      state.tagScrollTop = 0;
+      if (state.onlyMissing) window.setTimeout(scanMissingImages, 0);
       const visible = filteredTags();
       if (!visible.some((tag) => tag.id === state.selectedTagId)) {
         selectTag(visible[0] ? visible[0].id : "");
@@ -1440,6 +1539,9 @@
 
   function renderTags(parent) {
     const list = el("aside", "stash-tip-tags");
+    list.addEventListener("scroll", () => {
+      state.tagScrollTop = list.scrollTop;
+    });
     const tags = filteredTags();
     const totalPages = Math.max(1, Math.ceil(tags.length / TAGS_PER_PAGE));
     state.tagPage = Math.min(Math.max(1, state.tagPage), totalPages);
@@ -1476,10 +1578,14 @@
         selectTag(tag.id);
       });
       row.appendChild(el("span", "stash-tip-tag-name", tag.name));
-      row.appendChild(el("span", "stash-tip-tag-meta", tag.image_path ? "image" : `${tagUsage(tag)} uses`));
+      const knownImage = hasKnownImage(tag);
+      row.appendChild(el("span", "stash-tip-tag-meta", knownImage === true ? "image" : `${tagUsage(tag)} uses`));
       list.appendChild(row);
     });
     parent.appendChild(list);
+    window.requestAnimationFrame(() => {
+      list.scrollTop = state.tagScrollTop;
+    });
   }
 
   function renderStylePicker(parent) {
@@ -1672,15 +1778,15 @@
   function install() {
     registerPluginRoute();
     patchHistory();
-    addNav();
+    addMenuEntries();
     window.setTimeout(() => {
-      addNav();
+      addMenuEntries();
       addLauncher();
     }, 1500);
     render();
   }
 
-  const observer = new MutationObserver(addNav);
+  const observer = new MutationObserver(addMenuEntries);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("popstate", render);
   window.addEventListener("stash-tag-image-picker-route", render);

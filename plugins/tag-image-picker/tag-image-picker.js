@@ -22,6 +22,9 @@
     onlyMissing: false,
     tagPage: 1,
     style: "neon",
+    externalImage: "",
+    externalImageName: "",
+    externalUrl: "",
     routeRegistered: false,
     routeContainer: null,
   };
@@ -314,6 +317,111 @@
     drawSymbol(ctx, rule.icon, accent, secondary, theme.fg, tag.name);
     drawCornerGlyph(ctx, rule, tag.name, accent, theme);
     return canvas.toDataURL("image/png");
+  }
+
+  function tagPrompt(tag) {
+    if (!tag) return "";
+    const rule = classifyTag(tag.name);
+    const accent = accentFor(tag, rule.group);
+    return [
+      `Square 1:1 PNG icon for an adult media library tag: "${tag.name}".`,
+      "Use a clean premium pictogram style, centered subject, transparent or simple dark background, high contrast, crisp edges, no text, no logo, no watermark.",
+      `Brand style: dark interface, ${accent} accent color, glossy neon rim light, consistent set icon language.`,
+      "Keep it symbolic and tag-focused, avoid minors, avoid real-person likenesses, avoid copyrighted characters.",
+    ].join(" ");
+  }
+
+  function loadImage(src) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("Could not load image"));
+      image.src = src;
+    });
+  }
+
+  async function composeExternalIcon(tag, imageData, style) {
+    const canvas = document.createElement("canvas");
+    canvas.width = ICON_SIZE;
+    canvas.height = ICON_SIZE;
+    const ctx = canvas.getContext("2d");
+    const rule = classifyTag(tag.name);
+    const theme = THEMES[style] || THEMES.neon;
+    const accent = accentFor(tag, rule.group);
+    const image = await loadImage(imageData);
+    drawBackground(ctx, theme, accent, tag.name);
+
+    ctx.save();
+    roundRect(ctx, 38, 38, 436, 436, 38);
+    ctx.clip();
+    ctx.fillStyle = "#0f1116";
+    ctx.fillRect(38, 38, 436, 436);
+    const scale = Math.max(436 / image.width, 436 / image.height);
+    const width = image.width * scale;
+    const height = image.height * scale;
+    ctx.drawImage(image, 256 - width / 2, 256 - height / 2, width, height);
+    ctx.restore();
+
+    ctx.strokeStyle = withAlpha(accent, 0.56);
+    ctx.lineWidth = 8;
+    roundRect(ctx, 34, 34, 444, 444, 42);
+    ctx.stroke();
+    drawCornerGlyph(ctx, rule, tag.name, accent, theme);
+    return canvas.toDataURL("image/png");
+  }
+
+  function readImageFile(file) {
+    return new Promise((resolve, reject) => {
+      if (!file || !file.type || !file.type.startsWith("image/")) {
+        reject(new Error("Choose a PNG, JPG, or WebP image"));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(new Error("Could not read image file"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function importImageUrl() {
+    const url = state.externalUrl.trim();
+    if (!url) return;
+    state.saving = true;
+    state.error = "";
+    state.status = "Importing image URL...";
+    render();
+    try {
+      const response = await fetch(url, { credentials: "omit" });
+      if (!response.ok) throw new Error(`Image download failed: ${response.status}`);
+      const blob = await response.blob();
+      if (!blob.type.startsWith("image/")) throw new Error("URL did not return an image");
+      state.externalImage = await readImageFile(new File([blob], "remote-image", { type: blob.type }));
+      state.externalImageName = url;
+      state.status = "Imported image URL";
+    } catch (error) {
+      state.error = `${error.message || String(error)}. If this is a Magnific download, save the PNG locally and use Upload PNG instead.`;
+      state.status = "";
+    } finally {
+      state.saving = false;
+      render();
+    }
+  }
+
+  async function copyPrompt() {
+    const tag = selectedTag();
+    if (!tag) return;
+    const prompt = tagPrompt(tag);
+    try {
+      await navigator.clipboard.writeText(prompt);
+      state.status = "Prompt copied for Magnific";
+    } catch (error) {
+      state.error = `Could not copy prompt: ${error.message || String(error)}`;
+    }
+    render();
+  }
+
+  function openMagnific() {
+    window.open("https://www.magnific.com/", "_blank", "noopener,noreferrer");
   }
 
   function shade(color, amount) {
@@ -1029,6 +1137,28 @@
     }
   }
 
+  async function saveExternal() {
+    const tag = selectedTag();
+    if (!tag || !state.externalImage) return;
+    state.saving = true;
+    state.error = "";
+    state.status = `Saving imported PNG for ${tag.name}...`;
+    render();
+    try {
+      const image = await composeExternalIcon(tag, state.externalImage, state.style);
+      const updated = await updateTagImage(tag.id, image);
+      tag.image_path = (updated && updated.image_path) || image;
+      state.status = `Saved imported PNG for ${tag.name}`;
+    } catch (error) {
+      state.error = error.message || String(error);
+      state.status = "";
+      console.error("[Tag Icon Studio] imported save failed", error);
+    } finally {
+      state.saving = false;
+      render();
+    }
+  }
+
   async function updateTagImage(id, image) {
     try {
       const data = await graphql(
@@ -1160,6 +1290,70 @@
     parent.appendChild(controls);
   }
 
+  function renderExternalPicker(parent, tag) {
+    const panel = el("div", "stash-tip-external");
+    const actions = el("div", "stash-tip-options");
+    const promptButton = el("button", "stash-tip-button", "Copy Magnific prompt");
+    promptButton.type = "button";
+    promptButton.disabled = !tag;
+    promptButton.addEventListener("click", copyPrompt);
+    const magnific = el("button", "stash-tip-button", "Open Magnific");
+    magnific.type = "button";
+    magnific.addEventListener("click", openMagnific);
+
+    const fileLabel = el("label", "stash-tip-file-button");
+    fileLabel.appendChild(el("span", "", state.externalImageName || "Upload PNG"));
+    const file = el("input", "");
+    file.type = "file";
+    file.accept = "image/png,image/jpeg,image/webp";
+    file.addEventListener("change", async () => {
+      const picked = file.files && file.files[0];
+      if (!picked) return;
+      state.saving = true;
+      state.error = "";
+      state.status = "Loading PNG...";
+      render();
+      try {
+        state.externalImage = await readImageFile(picked);
+        state.externalImageName = picked.name;
+        state.status = `Loaded ${picked.name}`;
+      } catch (error) {
+        state.error = error.message || String(error);
+        state.status = "";
+      } finally {
+        state.saving = false;
+        render();
+      }
+    });
+    fileLabel.appendChild(file);
+
+    const save = el("button", "stash-tip-button save", state.saving ? "Saving..." : "Apply imported PNG");
+    save.type = "button";
+    save.disabled = state.saving || !tag || !state.externalImage;
+    save.addEventListener("click", saveExternal);
+    actions.append(promptButton, magnific, fileLabel, save);
+
+    const urlRow = el("div", "stash-tip-url-row");
+    const url = el("input", "stash-tip-search");
+    url.type = "url";
+    url.placeholder = "Optional direct image URL";
+    url.value = state.externalUrl;
+    url.addEventListener("input", () => {
+      state.externalUrl = url.value;
+    });
+    const importButton = el("button", "stash-tip-button", "Import URL");
+    importButton.type = "button";
+    importButton.disabled = state.saving;
+    importButton.addEventListener("click", importImageUrl);
+    urlRow.append(url, importButton);
+
+    const prompt = el("textarea", "stash-tip-prompt");
+    prompt.readOnly = true;
+    prompt.value = tagPrompt(tag);
+    panel.append(actions, urlRow, prompt);
+    parent.appendChild(panel);
+  }
+
   function renderWork(parent) {
     const section = el("section", "stash-tip-work");
     const tag = selectedTag();
@@ -1168,6 +1362,7 @@
     heading.appendChild(el("div", "stash-tip-subtle", tag ? `${tagUsage(tag)} linked objects - ${classifyTag(tag.name).icon}` : "Choose a tag from the list"));
     section.appendChild(heading);
     renderStylePicker(section);
+    renderExternalPicker(section, tag);
     const previewRow = el("div", "stash-tip-preview-row");
     const generated = el("div", "stash-tip-preview-card");
     generated.appendChild(el("h3", "", "Generated"));
@@ -1180,6 +1375,17 @@
       generated.appendChild(el("div", "stash-tip-empty", "No tag selected"));
     }
     previewRow.appendChild(generated);
+    const imported = el("div", "stash-tip-preview-card");
+    imported.appendChild(el("h3", "", "Imported PNG"));
+    if (tag && state.externalImage) {
+      const img = el("img", "stash-tip-preview");
+      img.src = state.externalImage;
+      img.alt = `${tag.name} imported image`;
+      imported.appendChild(img);
+    } else {
+      imported.appendChild(el("div", "stash-tip-empty", "No PNG loaded"));
+    }
+    previewRow.appendChild(imported);
     const current = el("div", "stash-tip-preview-card");
     current.appendChild(el("h3", "", "Current"));
     if (tag && tag.image_path) {

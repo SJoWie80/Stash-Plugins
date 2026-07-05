@@ -48,6 +48,7 @@
 .stash-tip-source-choice[aria-pressed="true"] { background: #30455a; border-color: rgba(132,201,255,.75); box-shadow: 0 0 0 2px rgba(132,201,255,.16); }
 .stash-tip-source-choice img { aspect-ratio: 1 / 1; background: #eef1f6; border-radius: 6px; display: block; object-fit: contain; padding: .6rem; width: 100%; }
 .stash-tip-source-choice span { color: #c7d0dd; font-size: .68rem; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stash-tip-source-fallback { background: #252932; border: 1px solid rgba(255,255,255,.12); border-radius: 8px; color: #c7d0dd; margin: -.35rem 0 .8rem; padding: .75rem .9rem; width: min(100%, 32rem); }
 @media (max-width: 820px) {
   .stash-tip-app { padding: .8rem; }
   .stash-tip-titlebar, .stash-tip-toolbar, .stash-tip-content, .stash-tip-preview-row, .stash-tip-url-row { display: grid; grid-template-columns: 1fr; }

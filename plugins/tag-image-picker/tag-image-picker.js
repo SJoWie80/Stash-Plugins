@@ -31,6 +31,9 @@
     sourceTagId: "",
     loadingSourceTagId: "",
     sourceCache: {},
+    previewImage: "",
+    previewKey: "",
+    previewLoading: false,
     routeRegistered: false,
     routeContainer: null,
   };
@@ -304,6 +307,8 @@
       state.externalImage = "";
       state.externalImageName = "";
       state.sourceTagId = "";
+      state.previewImage = "";
+      state.previewKey = "";
       render();
       return;
     }
@@ -313,6 +318,8 @@
     state.externalImage = cached ? cached.imageData : "";
     state.externalImageName = cached ? cached.name : "";
     state.sourceTagId = cached ? id : "";
+    state.previewImage = "";
+    state.previewKey = "";
     render();
     if (!cached) loadSourceIcon(id);
   }
@@ -482,6 +489,8 @@
       if (!blob.type.startsWith("image/")) throw new Error("URL did not return an image");
       state.externalImage = await readImageFile(new File([blob], "remote-image", { type: blob.type }));
       state.externalImageName = url;
+      state.previewImage = "";
+      state.previewKey = "";
       state.status = "Imported image URL";
     } catch (error) {
       state.error = `${error.message || String(error)}. If this is a Magnific download, save the PNG locally and use Upload PNG instead.`;
@@ -535,8 +544,21 @@
       };
       state.status = `Loaded ${state.sourceResults.length || 1} Iconify choices for ${query}`;
     } catch (error) {
-      state.error = error.message || String(error);
-      state.status = "";
+      state.sourceResults = [];
+      state.sourceSelected = 0;
+      state.externalImage = "";
+      state.externalImageName = "";
+      state.sourceTagId = tag.id;
+      state.sourceCache[tag.id] = {
+        results: [],
+        selected: 0,
+        imageData: "",
+        name: "",
+      };
+      state.error = "";
+      state.status = `No Iconify match for ${query}; using fallback style`;
+      state.previewImage = "";
+      state.previewKey = "";
     } finally {
       state.saving = false;
       state.loadingSourceTagId = "";
@@ -567,6 +589,8 @@
     state.sourceSelected = index;
     state.externalImage = result.imageData;
     state.externalImageName = result.name ? `Iconify: ${result.name}` : "Iconify icon";
+    state.previewImage = "";
+    state.previewKey = "";
     if (state.selectedTagId) {
       state.sourceCache[state.selectedTagId] = {
         results: state.sourceResults,
@@ -577,6 +601,35 @@
       state.sourceTagId = state.selectedTagId;
     }
     if (shouldRender) render();
+  }
+
+  function previewKeyFor(tag) {
+    if (!tag) return "";
+    return [tag.id, state.style, state.sourceSelected, state.externalImage ? hashString(state.externalImage).toString(36) : "fallback"].join(":");
+  }
+
+  async function refreshStyledPreview(tagId) {
+    const tag = state.tags.find((item) => item.id === (tagId || state.selectedTagId)) || selectedTag();
+    if (!tag) return;
+    const key = previewKeyFor(tag);
+    if (!key || state.previewKey === key || state.previewLoading) return;
+    state.previewLoading = true;
+    try {
+      const image = state.externalImage ? await composeExternalIcon(tag, state.externalImage, state.style) : drawIcon(tag, state.style);
+      if (state.selectedTagId === tag.id) {
+        state.previewImage = image;
+        state.previewKey = key;
+      }
+    } catch (error) {
+      console.warn("[Tag Icon Studio] preview failed, using fallback", error);
+      if (state.selectedTagId === tag.id) {
+        state.previewImage = drawIcon(tag, state.style);
+        state.previewKey = key;
+      }
+    } finally {
+      state.previewLoading = false;
+      render();
+    }
   }
 
   function shade(color, amount) {
@@ -1294,13 +1347,13 @@
 
   async function saveExternal() {
     const tag = selectedTag();
-    if (!tag || !state.externalImage) return;
+    if (!tag) return;
     state.saving = true;
     state.error = "";
     state.status = `Saving icon for ${tag.name}...`;
     render();
     try {
-      const image = await composeExternalIcon(tag, state.externalImage, state.style);
+      const image = state.externalImage ? await composeExternalIcon(tag, state.externalImage, state.style) : drawIcon(tag, state.style);
       const updated = await updateTagImage(tag.id, image);
       tag.image_path = (updated && updated.image_path) || image;
       state.status = `Saved icon for ${tag.name}`;
@@ -1468,6 +1521,9 @@
       try {
         state.externalImage = await readImageFile(picked);
         state.externalImageName = picked.name;
+        state.previewImage = "";
+        state.previewKey = "";
+        state.sourceTagId = state.selectedTagId;
         state.status = `Loaded ${picked.name}`;
       } catch (error) {
         state.error = error.message || String(error);
@@ -1481,7 +1537,7 @@
 
     const save = el("button", "stash-tip-button save", state.saving ? "Saving..." : "Apply selected icon");
     save.type = "button";
-    save.disabled = state.saving || !tag || !state.externalImage;
+    save.disabled = state.saving || !tag;
     save.addEventListener("click", saveExternal);
     actions.append(source, fileLabel, save);
     panel.append(actions);
@@ -1501,6 +1557,8 @@
         choices.appendChild(choice);
       });
       panel.appendChild(choices);
+    } else if (tag && !state.loadingSourceTagId) {
+      panel.appendChild(el("div", "stash-tip-source-fallback", "No Iconify match; fallback style is ready."));
     }
     parent.appendChild(panel);
   }
@@ -1511,6 +1569,9 @@
     if (tag && state.sourceTagId !== tag.id && state.loadingSourceTagId !== tag.id && !state.sourceCache[tag.id]) {
       window.setTimeout(() => loadSourceIcon(tag.id), 0);
     }
+    if (tag && state.previewKey !== previewKeyFor(tag) && !state.previewLoading) {
+      window.setTimeout(() => refreshStyledPreview(tag.id), 0);
+    }
     const heading = el("div", "stash-tip-heading");
     heading.appendChild(el("h2", "", tag ? tag.name : "Select a tag"));
     heading.appendChild(el("div", "stash-tip-subtle", tag ? `${tagUsage(tag)} linked objects - ${classifyTag(tag.name).icon}` : "Choose a tag from the list"));
@@ -1519,14 +1580,14 @@
     renderExternalPicker(section, tag);
     const previewRow = el("div", "stash-tip-preview-row");
     const imported = el("div", "stash-tip-preview-card");
-    imported.appendChild(el("h3", "", "Selected source"));
-    if (tag && state.externalImage) {
-      const img = el("img", "stash-tip-preview source");
-      img.src = state.externalImage;
-      img.alt = `${tag.name} imported image`;
+    imported.appendChild(el("h3", "", "Styled preview"));
+    if (tag && state.previewImage) {
+      const img = el("img", "stash-tip-preview");
+      img.src = state.previewImage;
+      img.alt = `${tag.name} styled preview`;
       imported.appendChild(img);
     } else {
-      imported.appendChild(el("div", "stash-tip-empty", "No source icon loaded"));
+      imported.appendChild(el("div", "stash-tip-empty", state.previewLoading ? "Rendering preview..." : "Fallback preview will appear here"));
     }
     previewRow.appendChild(imported);
     const current = el("div", "stash-tip-preview-card");

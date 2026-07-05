@@ -1,6 +1,6 @@
 name: Tag Icon Studio
 description: Generate consistent local icon artwork and assign it to Stash tags.
-version: 0.2.7
+version: 0.2.8
 url: https://github.com/SJoWie80/Stash-Plugins
 exec:
   - python

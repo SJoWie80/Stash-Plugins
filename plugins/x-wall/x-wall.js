@@ -61,23 +61,13 @@
   }
 
   function findNav() {
-    const preferred = document.querySelector(".navbar-collapse .navbar-nav, .navbar-nav, nav .nav, header .nav");
+    const preferred = document.querySelector(".navbar-collapse .navbar-nav");
     if (preferred) return preferred;
     const labels = ["Scenes", "Images", "Groups", "Markers", "Performers", "Studios", "Tags"];
-    return Array.from(document.querySelectorAll("nav, header, .navbar, .navbar-nav, .btn-toolbar, [role='navigation'], div")).find((node) => {
+    return Array.from(document.querySelectorAll("nav, header, .navbar, .navbar-nav, .btn-toolbar, div")).find((node) => {
       const text = node.textContent || "";
       return labels.filter((label) => text.includes(label)).length >= 3;
     });
-  }
-
-  function insertNavItem(nav, item) {
-    const listItem = el("li", "nav-item stash-xw-nav-item");
-    listItem.appendChild(item);
-    if (nav.tagName && nav.tagName.toLowerCase() === "ul") {
-      nav.appendChild(listItem);
-      return;
-    }
-    nav.appendChild(item);
   }
 
   function addNav() {
@@ -87,10 +77,7 @@
         return;
       }
       const nav = findNav();
-      if (!nav) {
-        addLauncher();
-        return;
-      }
+      if (!nav) return;
       const wrap = el("div", "stash-xw-nav-wrap");
       wrap.id = NAV_ID;
       const link = el("a", "nav-link stash-xw-nav-button");
@@ -100,11 +87,11 @@
       link.appendChild(el("span", "stash-xw-nav-text", "X Wall"));
       link.addEventListener("click", navigate);
       wrap.appendChild(link);
-      insertNavItem(nav, wrap);
+      nav.appendChild(wrap);
       removeLauncher();
+      console.info("[X Wall] navbar button added");
     } catch (error) {
       console.error("[X Wall] failed adding nav", error);
-      addLauncher();
     }
   }
 
@@ -448,6 +435,7 @@
   }
 
   function install() {
+    console.info("[X Wall] plugin loaded");
     registerPluginRoute();
     patchHistory();
     addNav();

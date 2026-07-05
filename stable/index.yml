@@ -30,10 +30,10 @@
 
 - id: x-wall
   name: X Wall
-  version: 0.1.1
-  date: 2026-07-05 01:00:00
-  path: packages/x-wall-v0.1.1.zip
-  sha256: 46af1d58c34615af7dbae7de67bf8978358d02151e5e9fb121d6d7cee99a3c0e
+  version: 0.1.2
+  date: 2026-07-05 01:30:00
+  path: packages/x-wall-v0.1.2.zip
+  sha256: 551f28f9bb7137c6dfb5aaf6f03fcf0bb394cc9c3b658857b7a4b8a431b6314f
   metadata:
     description: Shows X profile timelines for favorite performers with Twitter/X URLs.
     url: https://github.com/SJoWie80/Stash-Plugins

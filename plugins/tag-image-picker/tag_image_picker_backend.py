@@ -29,6 +29,25 @@ CURATED_ICONS = [
     (("vr", "virtual reality", "180", "200", "220", "360"), ("mdi:virtual-reality", "tabler:badge-vr", "game-icons:vr-headset")),
     (("adult", "xxx", "porn"), ("dinkie-icons:adult", "dinkie-icons:adult-filled", "noto:adult", "el:adult")),
     (("sex worker",), ("healthicons:female-sex-worker", "healthicons:female-sex-worker-outline", "healthicons:male-sex-worker", "healthicons:male-sex-worker-outline")),
+    (("aggressive", "rough", "hardcore", "hard fuck", "angry", "rage"), ("boxicons:angry", "mingcute:angry-fill", "fe:rage", "game-icons:enrage", "mdi:flame")),
+    (("slapping", "slap", "spanking", "spank"), ("game-icons:slap", "game-icons:wind-slap", "icon-park-outline:fist", "mdi:hand-back-left")),
+    (("choking", "choke", "strangle"), ("game-icons:grab", "mdi:hand-back-left", "icon-park-outline:fist")),
+    (("dirty talk", "talking", "whisper"), ("mdi:message-text", "mdi:chat-alert", "material-symbols:chat")),
+    (("kinky",), ("openmoji:bdsm-rights", "mdi:handcuffs", "mdi:flame")),
+    (("romantic", "passion", "intimate"), ("mdi:heart", "game-icons:burning-passion", "openmoji:kiss", "mdi:candle")),
+]
+
+
+CONTEXT_QUERIES = [
+    (("aggressive", "rough", "hardcore", "hard fuck"), ("angry", "rage", "fist", "flame", "slap")),
+    (("slapping", "slap"), ("slap", "hand", "fist")),
+    (("spanking", "spank"), ("slap", "hand", "fist")),
+    (("choking", "choke", "strangle"), ("grab", "hand", "fist", "warning")),
+    (("dirty talk",), ("chat", "message", "talk")),
+    (("domination", "dominant", "femdom", "maledom"), ("crown", "handcuffs", "control", "power")),
+    (("submission", "submissive"), ("handcuffs", "kneel", "down", "collar")),
+    (("kinky", "fetish"), ("bdsm", "handcuffs", "flame")),
+    (("romantic", "passion", "intimate"), ("heart", "kiss", "candle")),
 ]
 
 
@@ -85,6 +104,19 @@ def curated_icons(query):
     return icons
 
 
+def context_queries(query):
+    text = normalize(query)
+    queries = []
+    for words, fallbacks in CONTEXT_QUERIES:
+        if any(word in text for word in words):
+            queries.extend(fallbacks)
+    if not queries:
+        parts = text.split()
+        if len(parts) > 1:
+            queries.extend(parts)
+    return queries
+
+
 def search_icons(query):
     params = urllib.parse.urlencode({"query": query, "limit": "24"})
     data = fetch_json("{}?{}".format(ICONIFY_SEARCH, params))
@@ -129,7 +161,11 @@ def iconify_icon(args):
     if not query:
         return {"error": "Missing Iconify search query"}
 
-    candidates = unique_icons(curated_icons(query) + search_icons(query))
+    candidates = curated_icons(query)
+    for fallback_query in context_queries(query):
+        candidates.extend(search_icons(fallback_query))
+    candidates.extend(search_icons(query))
+    candidates = unique_icons(candidates)
     if not candidates:
         return {"error": "No Iconify icon found for {}".format(query)}
 

@@ -33,10 +33,11 @@
 .stash-tip-heading { margin-bottom: .8rem; }
 .stash-tip-heading h2 { font-size: 1.2rem; margin: 0 0 .2rem; }
 .stash-tip-options { display: flex; flex-wrap: wrap; gap: .55rem; margin-bottom: 1rem; }
-.stash-tip-preview-row { display: grid; gap: 1rem; grid-template-columns: repeat(3, minmax(13rem, 20rem)); }
+.stash-tip-preview-row { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(13rem, 20rem)); }
 .stash-tip-preview-card { background: #252932; border: 1px solid rgba(255,255,255,.12); border-radius: 8px; padding: .8rem; }
 .stash-tip-preview-card h3 { font-size: 1rem; margin: 0 0 .65rem; }
 .stash-tip-preview { aspect-ratio: 1 / 1; background: #111418; border-radius: 8px; display: block; object-fit: cover; width: 100%; }
+.stash-tip-preview.source { background: #eef1f6; object-fit: contain; padding: 1.25rem; }
 .stash-tip-external { margin-bottom: 1rem; }
 .stash-tip-file-button { align-items: center; background: #2d3138; border: 1px solid rgba(255,255,255,.12); border-radius: 6px; color: inherit; cursor: pointer; display: inline-flex; min-height: 2.25rem; max-width: 18rem; overflow: hidden; padding: .35rem .75rem; text-overflow: ellipsis; white-space: nowrap; }
 .stash-tip-file-button input { display: none; }
@@ -44,8 +45,8 @@
 .stash-tip-prompt { background: #17191d; border: 1px solid rgba(255,255,255,.16); border-radius: 6px; color: inherit; min-height: 5.2rem; padding: .55rem .7rem; resize: vertical; width: min(100%, 46rem); }
 .stash-tip-source-grid { display: grid; gap: .55rem; grid-template-columns: repeat(5, minmax(5.5rem, 7rem)); margin: -.35rem 0 .8rem; }
 .stash-tip-source-choice { background: #252932; border: 1px solid rgba(255,255,255,.12); border-radius: 8px; color: inherit; cursor: pointer; display: grid; gap: .35rem; min-height: 7.7rem; padding: .45rem; text-align: center; }
-.stash-tip-source-choice[aria-pressed="true"] { background: #3c5364; border-color: rgba(255,255,255,.34); }
-.stash-tip-source-choice img { aspect-ratio: 1 / 1; background: #111418; border-radius: 6px; display: block; object-fit: contain; padding: .35rem; width: 100%; }
+.stash-tip-source-choice[aria-pressed="true"] { background: #30455a; border-color: rgba(132,201,255,.75); box-shadow: 0 0 0 2px rgba(132,201,255,.16); }
+.stash-tip-source-choice img { aspect-ratio: 1 / 1; background: #eef1f6; border-radius: 6px; display: block; object-fit: contain; padding: .6rem; width: 100%; }
 .stash-tip-source-choice span { color: #c7d0dd; font-size: .68rem; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 820px) {
   .stash-tip-app { padding: .8rem; }

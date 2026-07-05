@@ -30,10 +30,10 @@
 
 - id: tag-image-picker
   name: Tag Icon Studio
-  version: 0.2.6
-  date: 2026-07-06 00:15:00
-  path: packages/tag-image-picker-v0.2.6.zip
-  sha256: 9b77b3cd9f1d35cc13f31dd867755d52b93aedd33b488a9afed32dcc90c89106
+  version: 0.2.7
+  date: 2026-07-06 00:35:00
+  path: packages/tag-image-picker-v0.2.7.zip
+  sha256: 280bdce1e400897358497f5699c4995078e3def581c3f9efcc25e904922d238c
   metadata:
     description: Generate or import consistent icon artwork and assign it to Stash tags.
     url: https://github.com/SJoWie80/Stash-Plugins

@@ -28,14 +28,17 @@
     externalUrl: "",
     sourceResults: [],
     sourceSelected: 0,
+    sourceTagId: "",
+    loadingSourceTagId: "",
+    sourceCache: {},
     routeRegistered: false,
     routeContainer: null,
   };
 
   const THEMES = {
-    neon: { name: "Neon", bg: "#101318", fg: "#f4f7fb", muted: "#8090a6" },
-    dark: { name: "Dark", bg: "#151515", fg: "#f5efe7", muted: "#8b8177" },
-    punch: { name: "Punch", bg: "#171116", fg: "#fff4fb", muted: "#aa8fa0" },
+    neon: { name: "Neon", bg: "#101318", fg: "#f4f7fb", muted: "#8090a6", panel: "#171b23" },
+    dark: { name: "Graphite", bg: "#151515", fg: "#f5efe7", muted: "#8b8177", panel: "#202124" },
+    punch: { name: "Velvet", bg: "#171116", fg: "#fff4fb", muted: "#aa8fa0", panel: "#231722" },
   };
 
   const COLORS = {
@@ -245,6 +248,7 @@
       state.loaded = true;
       if (!state.selectedTagId && filteredTags().length) state.selectedTagId = filteredTags()[0].id;
       state.status = `${all.length} tags loaded`;
+      if (state.selectedTagId) window.setTimeout(() => loadSourceIcon(state.selectedTagId), 0);
     } catch (error) {
       state.error = error.message || String(error);
       state.status = "";
@@ -288,6 +292,29 @@
 
   function selectedTag() {
     return state.tags.find((tag) => tag.id === state.selectedTagId) || null;
+  }
+
+  function selectTag(id) {
+    if (state.selectedTagId === id) return;
+    state.selectedTagId = id;
+    state.error = "";
+    if (!id) {
+      state.sourceResults = [];
+      state.sourceSelected = 0;
+      state.externalImage = "";
+      state.externalImageName = "";
+      state.sourceTagId = "";
+      render();
+      return;
+    }
+    const cached = state.sourceCache[id];
+    state.sourceResults = cached ? cached.results : [];
+    state.sourceSelected = cached ? cached.selected : 0;
+    state.externalImage = cached ? cached.imageData : "";
+    state.externalImageName = cached ? cached.name : "";
+    state.sourceTagId = cached ? id : "";
+    render();
+    if (!cached) loadSourceIcon(id);
   }
 
   function tagUsage(tag) {
@@ -371,23 +398,58 @@
     const rule = classifyTag(tag.name);
     const theme = THEMES[style] || THEMES.neon;
     const accent = accentFor(tag, rule.group);
+    const secondary = shade(accent, -22);
     const image = await loadImage(imageData);
     drawBackground(ctx, theme, accent, tag.name);
 
     ctx.save();
-    roundRect(ctx, 38, 38, 436, 436, 38);
+    roundRect(ctx, 34, 34, 444, 444, 46);
     ctx.clip();
-    ctx.fillStyle = "#0f1116";
-    ctx.fillRect(38, 38, 436, 436);
-    const scale = Math.max(436 / image.width, 436 / image.height);
-    const width = image.width * scale;
-    const height = image.height * scale;
-    ctx.drawImage(image, 256 - width / 2, 256 - height / 2, width, height);
+    const panelGradient = ctx.createLinearGradient(52, 34, 460, 478);
+    panelGradient.addColorStop(0, shade(theme.panel || theme.bg, 10));
+    panelGradient.addColorStop(0.55, theme.bg);
+    panelGradient.addColorStop(1, shade(secondary, -42));
+    ctx.fillStyle = panelGradient;
+    ctx.fillRect(34, 34, 444, 444);
+    ctx.fillStyle = withAlpha(accent, 0.12);
+    circle(ctx, 372, 130, 142);
+    ctx.fillStyle = withAlpha(theme.fg, 0.035);
+    circle(ctx, 116, 390, 170);
     ctx.restore();
 
-    ctx.strokeStyle = withAlpha(accent, 0.56);
-    ctx.lineWidth = 8;
-    roundRect(ctx, 34, 34, 444, 444, 42);
+    const iconCanvas = document.createElement("canvas");
+    iconCanvas.width = ICON_SIZE;
+    iconCanvas.height = ICON_SIZE;
+    const iconCtx = iconCanvas.getContext("2d");
+    const box = 312;
+    const scale = Math.min(box / image.width, box / image.height);
+    const width = image.width * scale;
+    const height = image.height * scale;
+    const x = 256 - width / 2;
+    const y = 246 - height / 2;
+    iconCtx.drawImage(image, x, y, width, height);
+    iconCtx.globalCompositeOperation = "source-in";
+    const iconGradient = iconCtx.createLinearGradient(96, 86, 402, 430);
+    iconGradient.addColorStop(0, theme.fg);
+    iconGradient.addColorStop(0.58, accent);
+    iconGradient.addColorStop(1, shade(accent, 28));
+    iconCtx.fillStyle = iconGradient;
+    iconCtx.fillRect(0, 0, ICON_SIZE, ICON_SIZE);
+
+    ctx.save();
+    ctx.shadowColor = withAlpha(accent, 0.48);
+    ctx.shadowBlur = 30;
+    ctx.shadowOffsetY = 10;
+    ctx.drawImage(iconCanvas, 0, 0);
+    ctx.restore();
+
+    ctx.strokeStyle = withAlpha(theme.fg, 0.12);
+    ctx.lineWidth = 2;
+    roundRect(ctx, 48, 48, 416, 416, 38);
+    ctx.stroke();
+    ctx.strokeStyle = withAlpha(accent, 0.68);
+    ctx.lineWidth = 7;
+    roundRect(ctx, 30, 30, 452, 452, 48);
     ctx.stroke();
     drawCornerGlyph(ctx, rule, tag.name, accent, theme);
     return canvas.toDataURL("image/png");
@@ -396,7 +458,7 @@
   function readImageFile(file) {
     return new Promise((resolve, reject) => {
       if (!file || !file.type || !file.type.startsWith("image/")) {
-        reject(new Error("Choose a PNG, JPG, or WebP image"));
+        reject(new Error("Choose a PNG, JPG, WebP, or SVG image"));
         return;
       }
       const reader = new FileReader();
@@ -435,11 +497,23 @@
     return `https://icon-sets.iconify.design/?query=${query}`;
   }
 
-  async function loadSourceIcon() {
-    const tag = selectedTag();
+  async function loadSourceIcon(tagId) {
+    const tag = state.tags.find((item) => item.id === (tagId || state.selectedTagId)) || selectedTag();
     const query = (tag && tag.name) || state.search;
     if (!query) return;
+    if (state.loadingSourceTagId === tag.id) return;
+    const cached = state.sourceCache[tag.id];
+    if (cached) {
+      state.sourceResults = cached.results;
+      state.sourceSelected = cached.selected;
+      state.externalImage = cached.imageData;
+      state.externalImageName = cached.name;
+      state.sourceTagId = tag.id;
+      render();
+      return;
+    }
     state.saving = true;
+    state.loadingSourceTagId = tag.id;
     state.error = "";
     state.status = `Searching Iconify for ${query}...`;
     render();
@@ -452,12 +526,20 @@
       state.sourceResults = result.results || [];
       state.sourceSelected = 0;
       selectSourceResult(0, false);
+      state.sourceTagId = tag.id;
+      state.sourceCache[tag.id] = {
+        results: state.sourceResults,
+        selected: state.sourceSelected,
+        imageData: state.externalImage,
+        name: state.externalImageName,
+      };
       state.status = `Loaded ${state.sourceResults.length || 1} Iconify choices for ${query}`;
     } catch (error) {
       state.error = error.message || String(error);
       state.status = "";
     } finally {
       state.saving = false;
+      state.loadingSourceTagId = "";
       render();
     }
   }
@@ -485,6 +567,15 @@
     state.sourceSelected = index;
     state.externalImage = result.imageData;
     state.externalImageName = result.name ? `Iconify: ${result.name}` : "Iconify icon";
+    if (state.selectedTagId) {
+      state.sourceCache[state.selectedTagId] = {
+        results: state.sourceResults,
+        selected: index,
+        imageData: state.externalImage,
+        name: state.externalImageName,
+      };
+      state.sourceTagId = state.selectedTagId;
+    }
     if (shouldRender) render();
   }
 
@@ -1206,13 +1297,13 @@
     if (!tag || !state.externalImage) return;
     state.saving = true;
     state.error = "";
-    state.status = `Saving imported PNG for ${tag.name}...`;
+    state.status = `Saving icon for ${tag.name}...`;
     render();
     try {
       const image = await composeExternalIcon(tag, state.externalImage, state.style);
       const updated = await updateTagImage(tag.id, image);
       tag.image_path = (updated && updated.image_path) || image;
-      state.status = `Saved imported PNG for ${tag.name}`;
+      state.status = `Saved icon for ${tag.name}`;
     } catch (error) {
       state.error = error.message || String(error);
       state.status = "";
@@ -1264,7 +1355,10 @@
       state.search = search.value;
       state.tagPage = 1;
       const visible = filteredTags();
-      if (!visible.some((tag) => tag.id === state.selectedTagId)) state.selectedTagId = visible[0] ? visible[0].id : "";
+      if (!visible.some((tag) => tag.id === state.selectedTagId)) {
+        selectTag(visible[0] ? visible[0].id : "");
+        return;
+      }
       render();
     });
 
@@ -1276,7 +1370,10 @@
       state.onlyMissing = missingInput.checked;
       state.tagPage = 1;
       const visible = filteredTags();
-      if (!visible.some((tag) => tag.id === state.selectedTagId)) state.selectedTagId = visible[0] ? visible[0].id : "";
+      if (!visible.some((tag) => tag.id === state.selectedTagId)) {
+        selectTag(visible[0] ? visible[0].id : "");
+        return;
+      }
       render();
     });
     missing.append(missingInput, el("span", "", "Missing only"));
@@ -1323,8 +1420,7 @@
       row.type = "button";
       row.setAttribute("aria-pressed", String(tag.id === state.selectedTagId));
       row.addEventListener("click", () => {
-        state.selectedTagId = tag.id;
-        render();
+        selectTag(tag.id);
       });
       row.appendChild(el("span", "stash-tip-tag-name", tag.name));
       row.appendChild(el("span", "stash-tip-tag-meta", tag.image_path ? "image" : `${tagUsage(tag)} uses`));
@@ -1346,31 +1442,19 @@
       state.style = style.value;
       render();
     });
-    const apply = el("button", "stash-tip-button save", state.saving ? "Saving..." : "Apply icon");
-    apply.type = "button";
-    apply.disabled = state.saving || !selectedTag();
-    apply.addEventListener("click", saveGenerated);
-    controls.append(style, apply);
+    controls.append(style);
     parent.appendChild(controls);
   }
 
   function renderExternalPicker(parent, tag) {
     const panel = el("div", "stash-tip-external");
     const actions = el("div", "stash-tip-options");
-    const auto = el("button", "stash-tip-button save", state.saving ? "Loading..." : "Auto Iconify");
-    auto.type = "button";
-    auto.disabled = state.saving || !tag;
-    auto.addEventListener("click", loadSourceIcon);
-    const promptButton = el("button", "stash-tip-button", "Copy prompt");
-    promptButton.type = "button";
-    promptButton.disabled = !tag;
-    promptButton.addEventListener("click", copyPrompt);
     const source = el("button", "stash-tip-button", "Open Iconify");
     source.type = "button";
     source.addEventListener("click", openIconSearch);
 
     const fileLabel = el("label", "stash-tip-file-button");
-    fileLabel.appendChild(el("span", "", state.externalImageName || "Upload PNG"));
+    fileLabel.appendChild(el("span", "", state.externalImageName || "Upload icon"));
     const file = el("input", "");
     file.type = "file";
     file.accept = "image/png,image/jpeg,image/webp,image/svg+xml";
@@ -1395,29 +1479,11 @@
     });
     fileLabel.appendChild(file);
 
-    const save = el("button", "stash-tip-button save", state.saving ? "Saving..." : "Apply imported PNG");
+    const save = el("button", "stash-tip-button save", state.saving ? "Saving..." : "Apply selected icon");
     save.type = "button";
     save.disabled = state.saving || !tag || !state.externalImage;
     save.addEventListener("click", saveExternal);
-    actions.append(auto, source, promptButton, fileLabel, save);
-
-    const urlRow = el("div", "stash-tip-url-row");
-    const url = el("input", "stash-tip-search");
-    url.type = "url";
-    url.placeholder = "Optional direct image URL";
-    url.value = state.externalUrl;
-    url.addEventListener("input", () => {
-      state.externalUrl = url.value;
-    });
-    const importButton = el("button", "stash-tip-button", "Import URL");
-    importButton.type = "button";
-    importButton.disabled = state.saving;
-    importButton.addEventListener("click", importImageUrl);
-    urlRow.append(url, importButton);
-
-    const prompt = el("textarea", "stash-tip-prompt");
-    prompt.readOnly = true;
-    prompt.value = tagPrompt(tag);
+    actions.append(source, fileLabel, save);
     panel.append(actions);
     if (state.sourceResults.length) {
       const choices = el("div", "stash-tip-source-grid");
@@ -1436,13 +1502,15 @@
       });
       panel.appendChild(choices);
     }
-    panel.append(urlRow, prompt);
     parent.appendChild(panel);
   }
 
   function renderWork(parent) {
     const section = el("section", "stash-tip-work");
     const tag = selectedTag();
+    if (tag && state.sourceTagId !== tag.id && state.loadingSourceTagId !== tag.id && !state.sourceCache[tag.id]) {
+      window.setTimeout(() => loadSourceIcon(tag.id), 0);
+    }
     const heading = el("div", "stash-tip-heading");
     heading.appendChild(el("h2", "", tag ? tag.name : "Select a tag"));
     heading.appendChild(el("div", "stash-tip-subtle", tag ? `${tagUsage(tag)} linked objects - ${classifyTag(tag.name).icon}` : "Choose a tag from the list"));
@@ -1450,21 +1518,10 @@
     renderStylePicker(section);
     renderExternalPicker(section, tag);
     const previewRow = el("div", "stash-tip-preview-row");
-    const generated = el("div", "stash-tip-preview-card");
-    generated.appendChild(el("h3", "", "Generated"));
-    if (tag) {
-      const img = el("img", "stash-tip-preview");
-      img.src = drawIcon(tag, state.style);
-      img.alt = `${tag.name} generated icon`;
-      generated.appendChild(img);
-    } else {
-      generated.appendChild(el("div", "stash-tip-empty", "No tag selected"));
-    }
-    previewRow.appendChild(generated);
     const imported = el("div", "stash-tip-preview-card");
-    imported.appendChild(el("h3", "", "Source icon"));
+    imported.appendChild(el("h3", "", "Selected source"));
     if (tag && state.externalImage) {
-      const img = el("img", "stash-tip-preview");
+      const img = el("img", "stash-tip-preview source");
       img.src = state.externalImage;
       img.alt = `${tag.name} imported image`;
       imported.appendChild(img);

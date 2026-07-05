@@ -449,11 +449,10 @@
         query,
       });
       if (!result || result.error) throw new Error((result && result.error) || "No Iconify result");
-      state.externalImage = result.imageData || "";
-      state.externalImageName = result.name ? `Iconify: ${result.name}` : `Iconify: ${query}`;
       state.sourceResults = result.results || [];
       state.sourceSelected = 0;
-      state.status = `Loaded Iconify icon for ${query}`;
+      selectSourceResult(0, false);
+      state.status = `Loaded ${state.sourceResults.length || 1} Iconify choices for ${query}`;
     } catch (error) {
       state.error = error.message || String(error);
       state.status = "";
@@ -478,6 +477,15 @@
 
   function openIconSearch() {
     window.open(iconSearchUrl(selectedTag()), "_blank", "noopener,noreferrer");
+  }
+
+  function selectSourceResult(index, shouldRender) {
+    const result = state.sourceResults[index];
+    if (!result || !result.imageData) return;
+    state.sourceSelected = index;
+    state.externalImage = result.imageData;
+    state.externalImageName = result.name ? `Iconify: ${result.name}` : "Iconify icon";
+    if (shouldRender) render();
   }
 
   function shade(color, amount) {
@@ -1365,7 +1373,7 @@
     fileLabel.appendChild(el("span", "", state.externalImageName || "Upload PNG"));
     const file = el("input", "");
     file.type = "file";
-    file.accept = "image/png,image/jpeg,image/webp";
+    file.accept = "image/png,image/jpeg,image/webp,image/svg+xml";
     file.addEventListener("change", async () => {
       const picked = file.files && file.files[0];
       if (!picked) return;
@@ -1410,7 +1418,25 @@
     const prompt = el("textarea", "stash-tip-prompt");
     prompt.readOnly = true;
     prompt.value = tagPrompt(tag);
-    panel.append(actions, urlRow, prompt);
+    panel.append(actions);
+    if (state.sourceResults.length) {
+      const choices = el("div", "stash-tip-source-grid");
+      state.sourceResults.forEach((result, index) => {
+        const choice = el("button", "stash-tip-source-choice");
+        choice.type = "button";
+        choice.setAttribute("aria-pressed", String(index === state.sourceSelected));
+        choice.title = result.name || result.id || "Iconify icon";
+        choice.addEventListener("click", () => selectSourceResult(index, true));
+        const img = el("img", "");
+        img.src = result.imageData;
+        img.alt = result.name || result.id || "Iconify icon";
+        choice.appendChild(img);
+        choice.appendChild(el("span", "", result.id || result.name || `Choice ${index + 1}`));
+        choices.appendChild(choice);
+      });
+      panel.appendChild(choices);
+    }
+    panel.append(urlRow, prompt);
     parent.appendChild(panel);
   }
 
@@ -1436,14 +1462,14 @@
     }
     previewRow.appendChild(generated);
     const imported = el("div", "stash-tip-preview-card");
-    imported.appendChild(el("h3", "", "Imported PNG"));
+    imported.appendChild(el("h3", "", "Source icon"));
     if (tag && state.externalImage) {
       const img = el("img", "stash-tip-preview");
       img.src = state.externalImage;
       img.alt = `${tag.name} imported image`;
       imported.appendChild(img);
     } else {
-      imported.appendChild(el("div", "stash-tip-empty", "No PNG loaded"));
+      imported.appendChild(el("div", "stash-tip-empty", "No source icon loaded"));
     }
     previewRow.appendChild(imported);
     const current = el("div", "stash-tip-preview-card");

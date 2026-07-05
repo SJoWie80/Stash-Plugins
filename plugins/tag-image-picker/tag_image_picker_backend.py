@@ -11,24 +11,24 @@ ICONIFY_ICON = "https://api.iconify.design/{}/{}.svg"
 
 
 CURATED_ICONS = [
-    (("anal", "anus", "gaping", "rim"), "healthicons:anus"),
-    (("cock", "dick", "penis", "bbc", "erect"), "healthicons:penis"),
-    (("pussy", "vagina", "vaginal", "vulva", "clit", "labia"), "healthicons:vagina"),
-    (("tits", "boobs", "breast", "nipples", "areolas", "topless"), "healthicons:breasts"),
-    (("condom", "safe sex"), "healthicons:male-condom"),
-    (("cum", "sperm", "facial", "swallowing", "creampie", "cream pie"), "healthicons:sperm"),
-    (("bdsm", "bondage", "fetish", "submission", "domination", "femdom", "maledom"), "openmoji:bdsm-rights"),
-    (("handcuffs", "restraints", "cuffs"), "mdi:handcuffs"),
-    (("dildo", "vibrator", "sex toy", "toys", "magic wand"), "arcticons:vibrator"),
-    (("lingerie", "bra", "panties", "thong", "underwear"), "mdi:lingerie"),
-    (("oral", "blowjob", "deepthroat", "mouth", "licking", "sucking", "rimming"), "material-symbols:lips"),
-    (("kiss", "kissing"), "openmoji:kiss"),
-    (("feet", "foot", "toe", "barefoot"), "game-icons:morgue-feet"),
-    (("teacher", "professor", "tutor"), "mdi:teacher"),
-    (("nurse", "doctor", "medical"), "healthicons:nurse"),
-    (("vr", "virtual reality", "180", "200", "220", "360"), "mdi:virtual-reality"),
-    (("adult", "xxx", "porn"), "dinkie-icons:adult"),
-    (("sex worker",), "healthicons:female-sex-worker"),
+    (("anal", "anus, gaping", "gaping", "rim"), ("healthicons:anus", "healthicons:anus-outline", "healthicons:anus-24px", "healthicons:anus-outline-24px", "pinhead:anus")),
+    (("cock", "dick", "penis", "bbc", "erect"), ("healthicons:penis", "healthicons:penis-outline", "healthicons:penis-alt", "healthicons:penis-alt-outline", "healthicons:penis-24px")),
+    (("pussy", "vagina", "vaginal", "vulva", "clit", "labia"), ("healthicons:vagina", "healthicons:vagina-outline", "healthicons:vagina-alt", "healthicons:vagina-alt-outline")),
+    (("tits", "boobs", "breast", "nipples", "areolas", "topless"), ("healthicons:breasts", "healthicons:breasts-outline")),
+    (("condom", "safe sex"), ("healthicons:male-condom", "healthicons:male-condom-outline", "healthicons:female-condom", "healthicons:female-condom-outline")),
+    (("cum", "sperm", "facial", "swallowing", "creampie", "cream pie"), ("healthicons:sperm", "healthicons:sperm-outline", "hugeicons:sperm", "icon-park-outline:sperm")),
+    (("bdsm", "bondage", "fetish", "submission", "domination", "femdom", "maledom"), ("openmoji:bdsm-rights", "mdi:handcuffs", "hugeicons:handcuffs", "game-icons:handcuffs")),
+    (("handcuffs", "restraints", "cuffs"), ("mdi:handcuffs", "hugeicons:handcuffs", "game-icons:handcuffs", "fa7-solid:handcuffs")),
+    (("dildo", "vibrator", "sex toy", "toys", "magic wand"), ("arcticons:vibrator", "mdi:magic-staff", "game-icons:vibrating-shield")),
+    (("lingerie", "bra", "panties", "thong", "underwear"), ("mdi:lingerie", "lucide-lab:lingerie")),
+    (("oral", "blowjob", "deepthroat", "mouth", "licking", "sucking", "rimming"), ("material-symbols:lips", "mingcute:mouth-fill", "icon-park-outline:mouth", "openmoji:mouth")),
+    (("kiss", "kissing"), ("openmoji:kiss", "glyphs:kiss", "fa7-solid:kiss")),
+    (("feet", "foot", "toe", "barefoot"), ("game-icons:morgue-feet", "streamline-ultimate:medical-specialty-feet")),
+    (("teacher", "professor", "tutor"), ("mdi:teacher", "hugeicons:teacher", "game-icons:teacher")),
+    (("nurse", "doctor", "medical"), ("healthicons:nurse", "healthicons:nurse-outline", "tabler:nurse", "fontisto:nurse")),
+    (("vr", "virtual reality", "180", "200", "220", "360"), ("mdi:virtual-reality", "tabler:badge-vr", "game-icons:vr-headset")),
+    (("adult", "xxx", "porn"), ("dinkie-icons:adult", "dinkie-icons:adult-filled", "noto:adult", "el:adult")),
+    (("sex worker",), ("healthicons:female-sex-worker", "healthicons:female-sex-worker-outline", "healthicons:male-sex-worker", "healthicons:male-sex-worker-outline")),
 ]
 
 
@@ -73,21 +73,22 @@ def normalize(value):
     return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
 
 
-def curated_icon(query):
+def curated_icons(query):
     text = normalize(query)
+    icons = []
     for words, icon in CURATED_ICONS:
         if any(word in text for word in words):
-            return icon
-    return ""
+            if isinstance(icon, (list, tuple)):
+                icons.extend(icon)
+            else:
+                icons.append(icon)
+    return icons
 
 
-def search_icon(query):
-    params = urllib.parse.urlencode({"query": query, "limit": "16"})
+def search_icons(query):
+    params = urllib.parse.urlencode({"query": query, "limit": "24"})
     data = fetch_json("{}?{}".format(ICONIFY_SEARCH, params))
-    icons = data.get("icons") or []
-    if not icons:
-        return ""
-    return icons[0]
+    return data.get("icons") or []
 
 
 def icon_url(icon):
@@ -96,29 +97,65 @@ def icon_url(icon):
     return "{}?{}".format(ICONIFY_ICON.format(urllib.parse.quote(prefix), urllib.parse.quote(name)), params)
 
 
+def unique_icons(icons):
+    seen = set()
+    unique = []
+    for icon in icons:
+        if not icon or ":" not in icon or icon in seen:
+            continue
+        seen.add(icon)
+        unique.append(icon)
+    return unique
+
+
+def fetch_icon_result(icon):
+    url = icon_url(icon)
+    content_type, raw = fetch_bytes(url, "image/svg+xml,image/*,*/*")
+    if b"<svg" not in raw[:1000].lower():
+        return None
+    encoded = base64.b64encode(raw).decode("ascii")
+    prefix, name = icon.split(":", 1)
+    return {
+        "id": icon,
+        "name": icon.replace(":", " / "),
+        "sourceUrl": url,
+        "pageUrl": "https://icon-sets.iconify.design/{}/{}".format(prefix, name),
+        "imageData": "data:{};base64,{}".format(content_type or "image/svg+xml", encoded),
+    }
+
+
 def iconify_icon(args):
     query = str(arg_value(args, "query", "") or "").strip()
     if not query:
         return {"error": "Missing Iconify search query"}
 
-    selected = curated_icon(query) or search_icon(query)
-    if not selected or ":" not in selected:
+    candidates = unique_icons(curated_icons(query) + search_icons(query))
+    if not candidates:
         return {"error": "No Iconify icon found for {}".format(query)}
 
-    url = icon_url(selected)
-    content_type, raw = fetch_bytes(url, "image/svg+xml,image/*,*/*")
-    if b"<svg" not in raw[:1000].lower():
-        return {"error": "Iconify did not return an SVG"}
+    results = []
+    for icon in candidates:
+        try:
+            result = fetch_icon_result(icon)
+            if result:
+                results.append(result)
+        except Exception:
+            pass
+        if len(results) >= 5:
+            break
 
-    encoded = base64.b64encode(raw).decode("ascii")
+    if not results:
+        return {"error": "Iconify did not return usable SVG icons"}
+
+    selected = results[0]
     return {
         "output": {
-            "id": selected,
-            "name": selected.replace(":", " / "),
-            "sourceUrl": url,
-            "pageUrl": "https://icon-sets.iconify.design/{}/{}".format(*selected.split(":", 1)),
-            "imageData": "data:{};base64,{}".format(content_type or "image/svg+xml", encoded),
-            "results": [{"id": selected, "name": selected}],
+            "id": selected["id"],
+            "name": selected["name"],
+            "sourceUrl": selected["sourceUrl"],
+            "pageUrl": selected["pageUrl"],
+            "imageData": selected["imageData"],
+            "results": results,
         }
     }
 

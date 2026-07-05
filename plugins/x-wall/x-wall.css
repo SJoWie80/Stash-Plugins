@@ -2,6 +2,11 @@
   display: inline-flex;
 }
 
+.stash-xw-nav-item {
+  align-items: center;
+  display: inline-flex;
+}
+
 .stash-xw-nav-button {
   align-items: center;
   color: inherit;

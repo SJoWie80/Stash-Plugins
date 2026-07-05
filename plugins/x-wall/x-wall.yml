@@ -1,6 +1,6 @@
 name: X Wall
 description: Shows X profile timelines for favorite performers with Twitter/X URLs.
-version: 0.1.0
+version: 0.1.1
 url: https://github.com/SJoWie80/Stash-Plugins
 interface: raw
 ui:

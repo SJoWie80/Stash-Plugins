@@ -6,6 +6,7 @@
   const SETTINGS_NAV_ID = "stash-tip-settings-nav";
   const LAUNCHER_ID = "stash-tip-launcher";
   const APP_ID = "stash-tip-root";
+  const DONE_TAGS_KEY = "stash-tip-done-tags-v1";
   const PAGE_SIZE = 250;
   const MAX_PAGES = 80;
   const TAGS_PER_PAGE = 40;
@@ -36,9 +37,8 @@
     previewKey: "",
     previewLoading: false,
     tagScrollTop: 0,
+    doneTagIds: loadDoneTagIds(),
     imagePresence: {},
-    missingScanRunning: false,
-    missingScanComplete: false,
     routeRegistered: false,
     routeContainer: null,
   };
@@ -113,6 +113,61 @@
     while (node.firstChild) node.removeChild(node.firstChild);
   }
 
+  function loadDoneTagIds() {
+    try {
+      const raw = window.localStorage && window.localStorage.getItem(DONE_TAGS_KEY);
+      const parsed = raw ? JSON.parse(raw) : {};
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (error) {
+      return {};
+    }
+  }
+
+  function saveDoneTagIds() {
+    try {
+      if (window.localStorage) window.localStorage.setItem(DONE_TAGS_KEY, JSON.stringify(state.doneTagIds));
+    } catch (error) {
+      console.warn("[Tag Icon Studio] could not persist completed tag list", error);
+    }
+  }
+
+  function markTagDone(id) {
+    if (!id) return;
+    state.doneTagIds[id] = true;
+    state.imagePresence[id] = true;
+    saveDoneTagIds();
+  }
+
+  function ensureSelectedVisible() {
+    const visible = filteredTags();
+    if (visible.some((tag) => tag.id === state.selectedTagId)) return;
+    const start = Math.max(0, (state.tagPage - 1) * TAGS_PER_PAGE);
+    state.selectedTagId = (visible[start] || visible[0] || {}).id || "";
+    state.sourceResults = [];
+    state.sourceSelected = 0;
+    state.externalImage = "";
+    state.externalImageName = "";
+    state.sourceTagId = "";
+    state.previewImage = "";
+    state.previewKey = "";
+    if (state.selectedTagId) window.setTimeout(() => loadSourceIcon(state.selectedTagId), 0);
+  }
+
+  function captureTagScroll() {
+    const list = document.querySelector(".stash-tip-tags");
+    if (list) state.tagScrollTop = list.scrollTop;
+  }
+
+  function restoreTagScroll(list) {
+    const top = state.tagScrollTop || 0;
+    window.requestAnimationFrame(() => {
+      list.scrollTop = top;
+      window.setTimeout(() => {
+        list.scrollTop = top;
+      }, 0);
+    });
+  }
+
   function normalize(value) {
     return String(value || "").toLowerCase().replace(/[–—]/g, "-");
   }
@@ -180,19 +235,31 @@
   }
 
   function findSettingsNav() {
-    const labels = ["Plugins", "Interface", "Security", "Tools", "System"];
-    return Array.from(document.querySelectorAll("nav, aside, .nav, .navbar-nav, .list-group, [class*='settings'], [class*='Settings']")).find((node) => {
-      if (node.id === NAV_ID || node.id === SETTINGS_NAV_ID) return false;
+    const candidates = [];
+    const settingsLinks = Array.from(document.querySelectorAll("a[href*='settings'], a[href*='/settings']"));
+    settingsLinks.forEach((link) => {
+      const wrap = link.closest("nav, aside, ul, .nav, .navbar-nav, .list-group, [role='navigation'], [class*='sidebar'], [class*='Sidebar'], [class*='settings'], [class*='Settings']");
+      if (wrap) candidates.push(wrap);
+    });
+    candidates.push(...Array.from(document.querySelectorAll("nav, aside, .nav, .navbar-nav, .list-group, [role='navigation'], [class*='settings'], [class*='Settings']")));
+    const labels = ["Plugins", "Interface", "Security", "Tools", "System", "Metadata", "Library"];
+    return candidates.find((node) => {
+      if (!node || node.id === NAV_ID || node.id === SETTINGS_NAV_ID || node.querySelector(`#${SETTINGS_NAV_ID}`)) return false;
       const text = node.textContent || "";
-      return labels.filter((label) => text.includes(label)).length >= 2;
+      return labels.filter((label) => text.includes(label)).length >= 1;
     });
   }
 
   function addSettingsNav() {
     try {
-      if (document.getElementById(SETTINGS_NAV_ID)) return;
       const nav = findSettingsNav();
-      if (!nav) return;
+      const existing = document.getElementById(SETTINGS_NAV_ID);
+      if (existing && existing.classList.contains("stash-tip-settings-shortcut") && !window.location.pathname.includes("/settings") && !nav) {
+        existing.remove();
+        return;
+      }
+      if (existing && (!nav || nav.contains(existing))) return;
+      if (!nav && !window.location.pathname.includes("/settings")) return;
       const link = el("a", "nav-link list-group-item stash-tip-settings-button");
       link.id = SETTINGS_NAV_ID;
       link.href = ROUTE;
@@ -200,7 +267,13 @@
       link.appendChild(el("span", "fa fa-icons fas fa-shapes stash-tip-nav-icon"));
       link.appendChild(el("span", "stash-tip-nav-text", "Tag Icon Studio"));
       link.addEventListener("click", navigate);
-      nav.appendChild(link);
+      if (nav) {
+        if (existing) existing.remove();
+        nav.appendChild(link);
+      } else {
+        link.className = "stash-tip-settings-shortcut";
+        document.body.appendChild(link);
+      }
     } catch (error) {
       console.error("[Tag Icon Studio] failed adding settings nav", error);
     }
@@ -336,6 +409,7 @@
 
   function selectTag(id) {
     if (state.selectedTagId === id) return;
+    captureTagScroll();
     state.selectedTagId = id;
     state.error = "";
     if (!id) {
@@ -367,56 +441,11 @@
 
   function hasKnownImage(tag) {
     if (!tag) return false;
+    if (state.doneTagIds[tag.id]) return true;
     if (typeof state.imagePresence[tag.id] === "boolean") return state.imagePresence[tag.id];
     if (!tag.image_path) return false;
     if (String(tag.image_path).startsWith("data:")) return true;
-    return state.missingScanComplete ? true : null;
-  }
-
-  async function probeTagImage(tag) {
-    if (!tag || typeof state.imagePresence[tag.id] === "boolean") return;
-    if (!tag.image_path) {
-      state.imagePresence[tag.id] = false;
-      return;
-    }
-    if (String(tag.image_path).startsWith("data:")) {
-      state.imagePresence[tag.id] = true;
-      return;
-    }
-    try {
-      const response = await fetch(tag.image_path, {
-        method: "GET",
-        credentials: "same-origin",
-        cache: "no-store",
-      });
-      state.imagePresence[tag.id] = response.ok;
-    } catch (error) {
-      state.imagePresence[tag.id] = false;
-    }
-  }
-
-  async function scanMissingImages() {
-    if (state.missingScanRunning || state.missingScanComplete) return;
-    state.missingScanRunning = true;
-    state.status = "Checking missing tag images...";
-    render();
-    const tags = state.tags.slice();
-    let index = 0;
-    async function worker() {
-      while (index < tags.length) {
-        const tag = tags[index];
-        index += 1;
-        await probeTagImage(tag);
-      }
-    }
-    try {
-      await Promise.all(Array.from({ length: Math.min(8, tags.length) }, worker));
-      state.missingScanComplete = true;
-      state.status = "Missing image check complete";
-    } finally {
-      state.missingScanRunning = false;
-      render();
-    }
+    return false;
   }
 
   function filteredTags() {
@@ -1421,6 +1450,7 @@
   async function saveGenerated() {
     const tag = selectedTag();
     if (!tag) return;
+    captureTagScroll();
     state.saving = true;
     state.error = "";
     state.status = `Saving icon for ${tag.name}...`;
@@ -1429,7 +1459,8 @@
       const image = drawIcon(tag, state.style);
       const updated = await updateTagImage(tag.id, image);
       tag.image_path = (updated && updated.image_path) || image;
-      state.imagePresence[tag.id] = true;
+      markTagDone(tag.id);
+      if (state.onlyMissing) ensureSelectedVisible();
       state.status = `Saved icon for ${tag.name}`;
     } catch (error) {
       state.error = error.message || String(error);
@@ -1444,6 +1475,7 @@
   async function saveExternal() {
     const tag = selectedTag();
     if (!tag) return;
+    captureTagScroll();
     state.saving = true;
     state.error = "";
     state.status = `Saving icon for ${tag.name}...`;
@@ -1452,7 +1484,8 @@
       const image = state.externalImage ? await composeExternalIcon(tag, state.externalImage, state.style) : drawIcon(tag, state.style);
       const updated = await updateTagImage(tag.id, image);
       tag.image_path = (updated && updated.image_path) || image;
-      state.imagePresence[tag.id] = true;
+      markTagDone(tag.id);
+      if (state.onlyMissing) ensureSelectedVisible();
       state.status = `Saved icon for ${tag.name}`;
     } catch (error) {
       state.error = error.message || String(error);
@@ -1517,10 +1550,10 @@
     missingInput.type = "checkbox";
     missingInput.checked = state.onlyMissing;
     missingInput.addEventListener("change", () => {
+      captureTagScroll();
       state.onlyMissing = missingInput.checked;
       state.tagPage = 1;
       state.tagScrollTop = 0;
-      if (state.onlyMissing) window.setTimeout(scanMissingImages, 0);
       const visible = filteredTags();
       if (!visible.some((tag) => tag.id === state.selectedTagId)) {
         selectTag(visible[0] ? visible[0].id : "");
@@ -1552,7 +1585,9 @@
     previous.type = "button";
     previous.disabled = state.tagPage <= 1;
     previous.addEventListener("click", () => {
+      captureTagScroll();
       state.tagPage = Math.max(1, state.tagPage - 1);
+      state.tagScrollTop = 0;
       render();
     });
     const label = el("span", "stash-tip-page-label", `${tags.length} tags - page ${state.tagPage} / ${totalPages}`);
@@ -1560,7 +1595,9 @@
     next.type = "button";
     next.disabled = state.tagPage >= totalPages;
     next.addEventListener("click", () => {
+      captureTagScroll();
       state.tagPage = Math.min(totalPages, state.tagPage + 1);
+      state.tagScrollTop = 0;
       render();
     });
     pager.append(previous, label, next);
@@ -1574,7 +1611,13 @@
       const row = el("button", "stash-tip-tag");
       row.type = "button";
       row.setAttribute("aria-pressed", String(tag.id === state.selectedTagId));
-      row.addEventListener("click", () => {
+      row.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+      });
+      row.addEventListener("click", (event) => {
+        event.preventDefault();
+        captureTagScroll();
+        row.blur();
         selectTag(tag.id);
       });
       row.appendChild(el("span", "stash-tip-tag-name", tag.name));
@@ -1583,9 +1626,7 @@
       list.appendChild(row);
     });
     parent.appendChild(list);
-    window.requestAnimationFrame(() => {
-      list.scrollTop = state.tagScrollTop;
-    });
+    restoreTagScroll(list);
   }
 
   function renderStylePicker(parent) {

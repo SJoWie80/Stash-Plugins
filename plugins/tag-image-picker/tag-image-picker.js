@@ -40,6 +40,10 @@
     tagScrollTop: 0,
     doneTagIds: loadDoneTagIds(),
     imagePresence: {},
+    imageFingerprints: {},
+    defaultImageFingerprint: "",
+    missingScanRunning: false,
+    missingScanComplete: false,
     routeRegistered: false,
     routeContainer: null,
   };
@@ -313,6 +317,12 @@
         all = await loadTagsPaged(false);
       }
       state.tags = all;
+      if (force) {
+        state.imagePresence = {};
+        state.imageFingerprints = {};
+        state.defaultImageFingerprint = "";
+        state.missingScanComplete = false;
+      }
       state.loaded = true;
       if (!state.selectedTagId && filteredTags().length) state.selectedTagId = filteredTags()[0].id;
       state.status = `${all.length} tags loaded`;
@@ -405,6 +415,88 @@
     if (!tag.image_path) return false;
     if (String(tag.image_path).startsWith("data:")) return true;
     return false;
+  }
+
+  function svgFingerprint(text) {
+    const clean = String(text || "")
+      .replace(/<!--[\s\S]*?-->/g, "")
+      .replace(/\s+/g, " ")
+      .replace(/>\s+</g, "><")
+      .trim();
+    return clean && clean.toLowerCase().includes("<svg") ? hashString(clean).toString(36) : "";
+  }
+
+  async function probeTagImage(tag) {
+    if (!tag) return { hasImage: false, fingerprint: "" };
+    if (state.doneTagIds[tag.id]) return { hasImage: true, fingerprint: "" };
+    if (!tag.image_path) return { hasImage: false, fingerprint: "" };
+    if (String(tag.image_path).startsWith("data:")) return { hasImage: true, fingerprint: "" };
+    try {
+      const response = await fetch(tag.image_path, {
+        method: "GET",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      if (!response.ok) return { hasImage: false, fingerprint: "" };
+      const contentType = response.headers.get("Content-Type") || "";
+      if (contentType && !contentType.includes("svg") && contentType.startsWith("image/")) {
+        return { hasImage: true, fingerprint: "" };
+      }
+      const text = await response.text();
+      const fingerprint = contentType.includes("svg") || text.slice(0, 500).toLowerCase().includes("<svg") ? svgFingerprint(text) : "";
+      return { hasImage: true, fingerprint };
+    } catch (error) {
+      return { hasImage: false, fingerprint: "" };
+    }
+  }
+
+  async function scanMissingImages() {
+    if (state.missingScanRunning || state.missingScanComplete || !state.tags.length) return;
+    state.missingScanRunning = true;
+    state.status = "Checking default tag SVG placeholders...";
+    render();
+    const tags = state.tags.slice();
+    const fingerprints = {};
+    let index = 0;
+    let checked = 0;
+    async function worker() {
+      while (index < tags.length) {
+        const tag = tags[index];
+        index += 1;
+        const result = await probeTagImage(tag);
+        state.imagePresence[tag.id] = result.hasImage;
+        if (result.fingerprint) {
+          state.imageFingerprints[tag.id] = result.fingerprint;
+          fingerprints[result.fingerprint] = (fingerprints[result.fingerprint] || 0) + 1;
+        }
+        checked += 1;
+        if (checked % 50 === 0) {
+          state.status = `Checking default tag SVG placeholders... ${checked}/${tags.length}`;
+          render();
+        }
+      }
+    }
+    try {
+      await Promise.all(Array.from({ length: Math.min(6, tags.length) }, worker));
+      const entries = Object.entries(fingerprints).sort((a, b) => b[1] - a[1]);
+      const top = entries[0];
+      state.defaultImageFingerprint = top && top[1] >= 2 ? top[0] : "";
+      if (state.defaultImageFingerprint) {
+        state.tags.forEach((tag) => {
+          if (!state.doneTagIds[tag.id] && state.imageFingerprints[tag.id] === state.defaultImageFingerprint) {
+            state.imagePresence[tag.id] = false;
+          }
+        });
+      }
+      state.missingScanComplete = true;
+      if (state.onlyMissing) ensureSelectedVisible();
+      state.status = state.defaultImageFingerprint
+        ? `Missing check complete; default SVG found on ${fingerprints[state.defaultImageFingerprint]} tags`
+        : "Missing check complete";
+    } finally {
+      state.missingScanRunning = false;
+      render();
+    }
   }
 
   function filteredTags() {
@@ -1528,6 +1620,7 @@
       state.onlyMissing = missingInput.checked;
       state.tagPage = 1;
       state.tagScrollTop = 0;
+      if (state.onlyMissing) window.setTimeout(scanMissingImages, 0);
       const visible = filteredTags();
       if (!visible.some((tag) => tag.id === state.selectedTagId)) {
         selectTag(visible[0] ? visible[0].id : "");

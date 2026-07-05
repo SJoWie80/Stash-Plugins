@@ -1,14 +1,14 @@
 name: Tag Icon Studio
 description: Generate consistent local icon artwork and assign it to Stash tags.
-version: 0.2.4
+version: 0.2.5
 url: https://github.com/SJoWie80/Stash-Plugins
 exec:
   - python
   - "{pluginDir}/tag_image_picker_backend.py"
 interface: raw
 tasks:
-  - name: magnific-icon
-    description: Search Magnific icons and return the best PNG thumbnail for a tag.
+  - name: iconify-icon
+    description: Search Iconify and return the best open SVG icon for a tag.
 ui:
   javascript:
     - tag-image-picker.js

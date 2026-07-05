@@ -1,11 +1,35 @@
 import base64
 import json
+import re
 import sys
 import urllib.parse
 import urllib.request
 
 
-API_BASE = "https://api.magnific.com/v1/icons"
+ICONIFY_SEARCH = "https://api.iconify.design/search"
+ICONIFY_ICON = "https://api.iconify.design/{}/{}.svg"
+
+
+CURATED_ICONS = [
+    (("anal", "anus", "gaping", "rim"), "healthicons:anus"),
+    (("cock", "dick", "penis", "bbc", "erect"), "healthicons:penis"),
+    (("pussy", "vagina", "vaginal", "vulva", "clit", "labia"), "healthicons:vagina"),
+    (("tits", "boobs", "breast", "nipples", "areolas", "topless"), "healthicons:breasts"),
+    (("condom", "safe sex"), "healthicons:male-condom"),
+    (("cum", "sperm", "facial", "swallowing", "creampie", "cream pie"), "healthicons:sperm"),
+    (("bdsm", "bondage", "fetish", "submission", "domination", "femdom", "maledom"), "openmoji:bdsm-rights"),
+    (("handcuffs", "restraints", "cuffs"), "mdi:handcuffs"),
+    (("dildo", "vibrator", "sex toy", "toys", "magic wand"), "arcticons:vibrator"),
+    (("lingerie", "bra", "panties", "thong", "underwear"), "mdi:lingerie"),
+    (("oral", "blowjob", "deepthroat", "mouth", "licking", "sucking", "rimming"), "material-symbols:lips"),
+    (("kiss", "kissing"), "openmoji:kiss"),
+    (("feet", "foot", "toe", "barefoot"), "game-icons:morgue-feet"),
+    (("teacher", "professor", "tutor"), "mdi:teacher"),
+    (("nurse", "doctor", "medical"), "healthicons:nurse"),
+    (("vr", "virtual reality", "180", "200", "220", "360"), "mdi:virtual-reality"),
+    (("adult", "xxx", "porn"), "dinkie-icons:adult"),
+    (("sex worker",), "healthicons:female-sex-worker"),
+]
 
 
 def read_input():
@@ -27,96 +51,74 @@ def arg_value(args, key, default=""):
     return value
 
 
-def fetch_json(url, api_key):
+def fetch_bytes(url, accept):
     request = urllib.request.Request(
         url,
         headers={
-            "User-Agent": "Stash Tag Icon Studio",
-            "Accept": "application/json",
-            "x-magnific-api-key": api_key,
+            "User-Agent": "Mozilla/5.0 Stash Tag Icon Studio",
+            "Accept": accept,
         },
     )
     with urllib.request.urlopen(request, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
-
-
-def fetch_bytes(url):
-    request = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": "Stash Tag Icon Studio",
-            "Accept": "image/png,image/*,*/*",
-        },
-    )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        content_type = response.headers.get("Content-Type", "image/png").split(";")[0]
+        content_type = response.headers.get("Content-Type", "application/octet-stream").split(";")[0]
         return content_type, response.read()
 
 
-def best_thumbnail(icon):
-    thumbnails = icon.get("thumbnails") or []
-    thumbnails = [item for item in thumbnails if item.get("url")]
-    if not thumbnails:
-        return ""
-    thumbnails.sort(key=lambda item: int(item.get("width") or 0) * int(item.get("height") or 0), reverse=True)
-    return thumbnails[0].get("url") or ""
+def fetch_json(url):
+    content_type, raw = fetch_bytes(url, "application/json,*/*")
+    return json.loads(raw.decode("utf-8"))
 
 
-def download_url_for_icon(icon, api_key):
-    icon_id = icon.get("id")
-    if not icon_id:
-        return ""
-    params = urllib.parse.urlencode({"format": "png", "png_size": "512"})
-    data = fetch_json("{}/{}/download?{}".format(API_BASE, icon_id, params), api_key)
-    return ((data.get("data") or {}).get("url")) or ""
+def normalize(value):
+    return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
 
 
-def magnific_icon(args):
-    query = str(arg_value(args, "query", "") or "").strip()
-    api_key = str(arg_value(args, "apiKey", "") or "").strip()
-    if not query:
-        return {"error": "Missing Magnific search query"}
-    if not api_key:
-        return {"error": "Missing Magnific API key"}
+def curated_icon(query):
+    text = normalize(query)
+    for words, icon in CURATED_ICONS:
+        if any(word in text for word in words):
+            return icon
+    return ""
 
-    params = urllib.parse.urlencode(
-        {
-            "term": query,
-            "page": "1",
-            "per_page": "12",
-            "order": "relevance",
-            "thumbnail_size": "512",
-        }
-    )
-    data = fetch_json("{}?{}".format(API_BASE, params), api_key)
-    icons = data.get("data") or []
+
+def search_icon(query):
+    params = urllib.parse.urlencode({"query": query, "limit": "16"})
+    data = fetch_json("{}?{}".format(ICONIFY_SEARCH, params))
+    icons = data.get("icons") or []
     if not icons:
-        return {"error": "No Magnific icons found for {}".format(query)}
+        return ""
+    return icons[0]
 
-    selected = icons[0]
-    image_url = best_thumbnail(selected)
-    if not image_url:
-        image_url = download_url_for_icon(selected, api_key)
-    if not image_url:
-        return {"error": "Magnific returned an icon without a PNG URL"}
 
-    content_type, raw = fetch_bytes(image_url)
+def icon_url(icon):
+    prefix, name = icon.split(":", 1)
+    params = urllib.parse.urlencode({"height": "512"})
+    return "{}?{}".format(ICONIFY_ICON.format(urllib.parse.quote(prefix), urllib.parse.quote(name)), params)
+
+
+def iconify_icon(args):
+    query = str(arg_value(args, "query", "") or "").strip()
+    if not query:
+        return {"error": "Missing Iconify search query"}
+
+    selected = curated_icon(query) or search_icon(query)
+    if not selected or ":" not in selected:
+        return {"error": "No Iconify icon found for {}".format(query)}
+
+    url = icon_url(selected)
+    content_type, raw = fetch_bytes(url, "image/svg+xml,image/*,*/*")
+    if b"<svg" not in raw[:1000].lower():
+        return {"error": "Iconify did not return an SVG"}
+
     encoded = base64.b64encode(raw).decode("ascii")
-    results = [
-        {
-            "id": icon.get("id"),
-            "name": icon.get("name") or "",
-            "thumbnail": best_thumbnail(icon),
-        }
-        for icon in icons[:8]
-    ]
     return {
         "output": {
-            "id": selected.get("id"),
-            "name": selected.get("name") or query,
-            "sourceUrl": image_url,
-            "imageData": "data:{};base64,{}".format(content_type or "image/png", encoded),
-            "results": results,
+            "id": selected,
+            "name": selected.replace(":", " / "),
+            "sourceUrl": url,
+            "pageUrl": "https://icon-sets.iconify.design/{}/{}".format(*selected.split(":", 1)),
+            "imageData": "data:{};base64,{}".format(content_type or "image/svg+xml", encoded),
+            "results": [{"id": selected, "name": selected}],
         }
     }
 
@@ -125,8 +127,8 @@ def main():
     payload = read_input()
     args = payload.get("args") or {}
     action = str(arg_value(args, "action", "") or "").lower()
-    if action == "magnific-icon":
-        return magnific_icon(args)
+    if action == "iconify-icon":
+        return iconify_icon(args)
     return {"error": "Unknown action"}
 
 

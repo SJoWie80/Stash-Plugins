@@ -51,6 +51,11 @@
   };
 
   const RULES = [
+    { icon: "wet", group: "sex", words: ["wet", "visible wetness", "how wet", "a bit wet", "oiled", "oil", "wet look"] },
+    { icon: "amateur", group: "camera", words: ["amateur", "homemade", "selfie", "sextape"] },
+    { icon: "braces", group: "body", words: ["braces"] },
+    { icon: "breastsmouth", group: "oral", words: ["breast sucking", "breast licking", "breast kissing", "tits sucking", "big tits worship", "ass worship"] },
+    { icon: "buttplug", group: "sex", words: ["butt plug"] },
     { icon: "analcum", group: "anal", words: ["anal creampie", "anal cum", "cum on ass", "ass to mouth"] },
     { icon: "creampie", group: "cum", words: ["vaginal creampie", "creampie", "cream pie"] },
     { icon: "threed", group: "tech", words: ["3d"] },
@@ -379,15 +384,20 @@
     ctx.lineWidth = 18;
     const draw = {
       breasts: drawBreasts,
+      breastsmouth: drawBreastsMouth,
       butt: drawButt,
       vulva: drawVulva,
       penis: drawPenis,
       mouth: drawMouth,
+      wet: drawWet,
+      amateur: drawAmateur,
+      braces: drawBraces,
       cum: drawCum,
       analcum: drawAnalCum,
       creampie: drawCreampie,
       bondage: drawBondage,
       toy: drawToy,
+      buttplug: drawButtPlug,
       feet: drawFeet,
       hair: drawHair,
       eye: drawEye,
@@ -424,6 +434,28 @@
     ctx.quadraticCurveTo(-40, -128, 0, -42);
     ctx.quadraticCurveTo(40, -128, 118, 0);
     ctx.stroke();
+  }
+
+  function drawBreastsMouth(ctx, accent, secondary, fg) {
+    drawBreasts(ctx, accent, secondary, fg);
+    ctx.save();
+    ctx.translate(0, 80);
+    ctx.scale(0.58, 0.42);
+    ctx.fillStyle = "#ff4d7d";
+    ctx.beginPath();
+    ctx.moveTo(-145, 0);
+    ctx.quadraticCurveTo(-60, -82, 0, -25);
+    ctx.quadraticCurveTo(60, -82, 145, 0);
+    ctx.quadraticCurveTo(56, 72, 0, 42);
+    ctx.quadraticCurveTo(-56, 72, -145, 0);
+    ctx.fill();
+    ctx.strokeStyle = fg;
+    ctx.lineWidth = 16;
+    ctx.beginPath();
+    ctx.moveTo(-120, 4);
+    ctx.quadraticCurveTo(0, 42, 120, 4);
+    ctx.stroke();
+    ctx.restore();
   }
 
   function drawButt(ctx, accent, secondary, fg) {
@@ -479,6 +511,73 @@
     ctx.moveTo(-120, 4);
     ctx.quadraticCurveTo(0, 42, 120, 4);
     ctx.stroke();
+  }
+
+  function drawWet(ctx, accent, secondary, fg) {
+    ctx.fillStyle = "#4ee3ff";
+    droplet(ctx, -78, -40, 70);
+    droplet(ctx, 40, -78, 95);
+    droplet(ctx, 92, 78, 58);
+    ctx.strokeStyle = fg;
+    ctx.lineWidth = 12;
+    ctx.beginPath();
+    ctx.moveTo(-130, 122);
+    ctx.bezierCurveTo(-60, 78, 55, 165, 138, 108);
+    ctx.stroke();
+  }
+
+  function drawAmateur(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.86);
+    roundRect(ctx, -142, -82, 225, 164, 24);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(83, -34);
+    ctx.lineTo(152, -72);
+    ctx.lineTo(152, 72);
+    ctx.lineTo(83, 34);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = fg;
+    circle(ctx, -42, 0, 48);
+    ctx.fillStyle = secondary;
+    circle(ctx, -42, 0, 24);
+    ctx.strokeStyle = fg;
+    ctx.lineWidth = 12;
+    ctx.beginPath();
+    ctx.moveTo(-124, 112);
+    ctx.lineTo(-72, 70);
+    ctx.moveTo(-18, 112);
+    ctx.lineTo(-44, 72);
+    ctx.stroke();
+  }
+
+  function drawBraces(ctx, accent, secondary, fg) {
+    ctx.fillStyle = "#f8f4e8";
+    roundRect(ctx, -135, -72, 270, 144, 42);
+    ctx.fill();
+    ctx.strokeStyle = "#23262d";
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.moveTo(-132, 0);
+    ctx.lineTo(132, 0);
+    ctx.moveTo(-66, -68);
+    ctx.lineTo(-66, 68);
+    ctx.moveTo(0, -72);
+    ctx.lineTo(0, 72);
+    ctx.moveTo(66, -68);
+    ctx.lineTo(66, 68);
+    ctx.stroke();
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 12;
+    ctx.beginPath();
+    ctx.moveTo(-116, 0);
+    ctx.lineTo(116, 0);
+    ctx.stroke();
+    ctx.fillStyle = accent;
+    [-66, 0, 66].forEach((x) => {
+      roundRect(ctx, x - 15, -15, 30, 30, 6);
+      ctx.fill();
+    });
   }
 
   function drawCum(ctx, accent, secondary, fg) {
@@ -547,6 +646,29 @@
     ctx.strokeStyle = fg;
     ctx.lineWidth = 12;
     circleStroke(ctx, 86, -106, 24);
+  }
+
+  function drawButtPlug(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.88);
+    ctx.beginPath();
+    ctx.moveTo(0, -145);
+    ctx.bezierCurveTo(74, -90, 82, -10, 42, 62);
+    ctx.lineTo(24, 98);
+    ctx.lineTo(-24, 98);
+    ctx.lineTo(-42, 62);
+    ctx.bezierCurveTo(-82, -10, -74, -90, 0, -145);
+    ctx.fill();
+    roundRect(ctx, -48, 86, 96, 74, 30);
+    ctx.fill();
+    ctx.strokeStyle = fg;
+    ctx.lineWidth = 14;
+    ctx.beginPath();
+    ctx.moveTo(-115, 154);
+    ctx.quadraticCurveTo(0, 104, 115, 154);
+    ctx.stroke();
+    ctx.strokeStyle = secondary;
+    ctx.lineWidth = 12;
+    circleStroke(ctx, 112, -94, 30);
   }
 
   function drawFeet(ctx, accent, secondary, fg) {
@@ -847,6 +969,18 @@
     });
     ctx.closePath();
     ctx.fill();
+  }
+
+  function droplet(ctx, x, y, size) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(size / 100, size / 100);
+    ctx.beginPath();
+    ctx.moveTo(0, -92);
+    ctx.bezierCurveTo(68, -10, 58, 78, 0, 94);
+    ctx.bezierCurveTo(-58, 78, -68, -10, 0, -92);
+    ctx.fill();
+    ctx.restore();
   }
 
   function drawCornerGlyph(ctx, rule, tagName, accent, theme) {

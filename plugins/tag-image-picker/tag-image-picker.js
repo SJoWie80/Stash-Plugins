@@ -30,6 +30,8 @@
     sourceResults: [],
     sourceSelected: 0,
     sourceTagId: "",
+    sourceQuery: "",
+    manualIconQuery: "",
     loadingSourceTagId: "",
     sourceCache: {},
     previewImage: "",
@@ -371,6 +373,8 @@
       state.externalImage = "";
       state.externalImageName = "";
       state.sourceTagId = "";
+      state.sourceQuery = "";
+      state.manualIconQuery = "";
       state.previewImage = "";
       state.previewKey = "";
       render();
@@ -381,6 +385,8 @@
     state.sourceSelected = cached ? cached.selected : 0;
     state.externalImage = cached ? cached.imageData : "";
     state.externalImageName = cached ? cached.name : "";
+    state.sourceQuery = cached ? cached.query : "";
+    state.manualIconQuery = "";
     state.sourceTagId = cached ? id : "";
     state.previewImage = "";
     state.previewKey = "";
@@ -583,17 +589,18 @@
     return `https://icon-sets.iconify.design/?query=${query}`;
   }
 
-  async function loadSourceIcon(tagId) {
+  async function loadSourceIcon(tagId, queryOverride) {
     const tag = state.tags.find((item) => item.id === (tagId || state.selectedTagId)) || selectedTag();
-    const query = (tag && tag.name) || state.search;
+    const query = String(queryOverride || (tag && tag.name) || state.search || "").trim();
     if (!query) return;
     if (state.loadingSourceTagId === tag.id) return;
     const cached = state.sourceCache[tag.id];
-    if (cached) {
+    if (cached && cached.query === query) {
       state.sourceResults = cached.results;
       state.sourceSelected = cached.selected;
       state.externalImage = cached.imageData;
       state.externalImageName = cached.name;
+      state.sourceQuery = cached.query || query;
       state.sourceTagId = tag.id;
       render();
       return;
@@ -613,11 +620,13 @@
       state.sourceSelected = 0;
       selectSourceResult(0, false);
       state.sourceTagId = tag.id;
+      state.sourceQuery = query;
       state.sourceCache[tag.id] = {
         results: state.sourceResults,
         selected: state.sourceSelected,
         imageData: state.externalImage,
         name: state.externalImageName,
+        query,
       };
       state.status = `Loaded ${state.sourceResults.length || 1} Iconify choices for ${query}`;
     } catch (error) {
@@ -626,11 +635,13 @@
       state.externalImage = "";
       state.externalImageName = "";
       state.sourceTagId = tag.id;
+      state.sourceQuery = query;
       state.sourceCache[tag.id] = {
         results: [],
         selected: 0,
         imageData: "",
         name: "",
+        query,
       };
       state.error = "";
       state.status = `No Iconify match for ${query}; using fallback style`;
@@ -657,7 +668,16 @@
   }
 
   function openIconSearch() {
-    window.open(iconSearchUrl(selectedTag()), "_blank", "noopener,noreferrer");
+    const tag = selectedTag();
+    const query = state.manualIconQuery || state.sourceQuery || (tag && tag.name) || state.search || "";
+    window.open(`https://icon-sets.iconify.design/?query=${encodeURIComponent(query)}`, "_blank", "noopener,noreferrer");
+  }
+
+  function searchManualIcon() {
+    const tag = selectedTag();
+    const query = String(state.manualIconQuery || "").trim();
+    if (!tag || !query) return;
+    loadSourceIcon(tag.id, query);
   }
 
   function selectSourceResult(index, shouldRender) {
@@ -674,6 +694,7 @@
         selected: index,
         imageData: state.externalImage,
         name: state.externalImageName,
+        query: state.sourceQuery,
       };
       state.sourceTagId = state.selectedTagId;
     }
@@ -1624,6 +1645,7 @@
         state.previewImage = "";
         state.previewKey = "";
         state.sourceTagId = state.selectedTagId;
+        state.sourceQuery = "";
         state.status = `Loaded ${picked.name}`;
       } catch (error) {
         state.error = error.message || String(error);
@@ -1641,6 +1663,30 @@
     save.addEventListener("click", saveExternal);
     actions.append(source, fileLabel, save);
     panel.append(actions);
+
+    const searchRow = el("form", "stash-tip-icon-search");
+    searchRow.addEventListener("submit", (event) => {
+      event.preventDefault();
+      searchManualIcon();
+    });
+    const iconSearch = el("input", "stash-tip-search");
+    iconSearch.type = "search";
+    iconSearch.placeholder = "Iconify keyword";
+    iconSearch.value = state.manualIconQuery;
+    iconSearch.disabled = !tag || state.saving;
+    iconSearch.addEventListener("input", () => {
+      state.manualIconQuery = iconSearch.value;
+    });
+    const iconSearchButton = el("button", "stash-tip-button", state.loadingSourceTagId ? "Searching..." : "Search icons");
+    iconSearchButton.type = "submit";
+    iconSearchButton.disabled = !tag || state.saving;
+    searchRow.append(iconSearch, iconSearchButton);
+    panel.appendChild(searchRow);
+
+    if (state.sourceQuery) {
+      panel.appendChild(el("div", "stash-tip-source-query", `Iconify keyword: ${state.sourceQuery}`));
+    }
+
     if (state.sourceResults.length) {
       const choices = el("div", "stash-tip-source-grid");
       state.sourceResults.forEach((result, index) => {

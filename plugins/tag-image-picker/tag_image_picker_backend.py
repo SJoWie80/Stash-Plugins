@@ -35,10 +35,14 @@ CURATED_ICONS = [
     (("dirty talk", "talking", "whisper"), ("mdi:message-text", "mdi:chat-alert", "material-symbols:chat")),
     (("kinky",), ("openmoji:bdsm-rights", "mdi:handcuffs", "mdi:flame")),
     (("romantic", "passion", "intimate"), ("mdi:heart", "game-icons:burning-passion", "openmoji:kiss", "mdi:candle")),
+    (("all girl", "all girls", "girl girl", "girl on girl", "lesbian"), ("fa6-solid:venus-double", "mdi:gender-female", "tabler:gender-female", "ph:gender-female-bold", "mdi:human-female-female")),
+    (("20+", "20 plus", "twenty plus", "adult age", "adult only"), ("dinkie-icons:adult", "dinkie-icons:adult-filled", "mdi:numeric-20-plus-box", "mdi:plus-circle", "mdi:shield-account")),
 ]
 
 
 CONTEXT_QUERIES = [
+    (("all girl", "all girls", "girl girl", "girl on girl", "lesbian"), ("venus", "female", "gender female", "women", "couple")),
+    (("20+", "20 plus", "twenty plus", "adult age", "adult only"), ("adult", "age", "plus", "rating", "shield")),
     (("aggressive", "rough", "hardcore", "hard fuck"), ("angry", "rage", "fist", "flame", "slap")),
     (("slapping", "slap"), ("slap", "hand", "fist")),
     (("spanking", "spank"), ("slap", "hand", "fist")),
@@ -48,6 +52,16 @@ CONTEXT_QUERIES = [
     (("submission", "submissive"), ("handcuffs", "kneel", "down", "collar")),
     (("kinky", "fetish"), ("bdsm", "handcuffs", "flame")),
     (("romantic", "passion", "intimate"), ("heart", "kiss", "candle")),
+]
+
+
+QUERY_REWRITES = [
+    (re.compile(r"^(all\s+girls?|girl\s+on\s+girl|girl\s+girl|lesbian)$"), "lesbian female"),
+    (re.compile(r"^\d{2}\s*\+$"), "adult age plus"),
+    (re.compile(r"^(18|19|20|21)\s*plus$"), "adult age plus"),
+    (re.compile(r"^\d+k\s+available$"), "video resolution"),
+    (re.compile(r"^\d+k$"), "video resolution"),
+    (re.compile(r"^all\s+(sex|vaginal|anal|natural)$"), r"\1"),
 ]
 
 
@@ -92,11 +106,30 @@ def normalize(value):
     return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
 
 
+def search_terms(query):
+    raw = str(query or "").strip().lower()
+    text = normalize(raw)
+    terms = []
+    for pattern, replacement in QUERY_REWRITES:
+        if pattern.search(raw) or pattern.search(text):
+            terms.append(pattern.sub(replacement, raw if pattern.search(raw) else text))
+    terms.append(query)
+    terms.append(text)
+    unique = []
+    seen = set()
+    for term in terms:
+        clean = normalize(term)
+        if clean and clean not in seen:
+            seen.add(clean)
+            unique.append(clean)
+    return unique
+
+
 def curated_icons(query):
-    text = normalize(query)
+    texts = search_terms(query)
     icons = []
     for words, icon in CURATED_ICONS:
-        if any(word in text for word in words):
+        if any(any(normalize(word) in text for text in texts) for word in words):
             if isinstance(icon, (list, tuple)):
                 icons.extend(icon)
             else:
@@ -105,15 +138,16 @@ def curated_icons(query):
 
 
 def context_queries(query):
-    text = normalize(query)
+    texts = search_terms(query)
     queries = []
     for words, fallbacks in CONTEXT_QUERIES:
-        if any(word in text for word in words):
+        if any(any(normalize(word) in text for text in texts) for word in words):
             queries.extend(fallbacks)
     if not queries:
-        parts = text.split()
+        parts = texts[-1].split()
         if len(parts) > 1:
             queries.extend(parts)
+    queries.extend(texts)
     return queries
 
 

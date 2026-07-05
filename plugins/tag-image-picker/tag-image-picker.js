@@ -16,6 +16,7 @@
     loadingTags: false,
     saving: false,
     loaded: false,
+    pluginId: "",
     error: "",
     status: "",
     search: "",
@@ -25,6 +26,9 @@
     externalImage: "",
     externalImageName: "",
     externalUrl: "",
+    magnificApiKey: localStorage.getItem("stash-tip-magnific-api-key") || "",
+    magnificResults: [],
+    magnificSelected: 0,
     routeRegistered: false,
     routeContainer: null,
   };
@@ -202,6 +206,26 @@
       throw new Error(payload.errors.map((error) => error.message).join("; "));
     }
     return payload.data;
+  }
+
+  async function getPluginId() {
+    if (state.pluginId) return state.pluginId;
+    const data = await graphql("query TagIconStudioPluginId { plugins { id name } }", {});
+    const plugin = ((data && data.plugins) || []).find((item) => item && item.name === "Tag Icon Studio");
+    if (!plugin || !plugin.id) throw new Error("Tag Icon Studio plugin ID kon niet worden gevonden");
+    state.pluginId = plugin.id;
+    return state.pluginId;
+  }
+
+  async function pluginOperation(args) {
+    const pluginId = await getPluginId();
+    const data = await graphql(
+      "mutation TagIconStudioOperation($pluginId: ID!, $args: Map) { runPluginOperation(plugin_id: $pluginId, args: $args) }",
+      { pluginId, args }
+    );
+    const result = data && data.runPluginOperation;
+    const output = result && (result.output || result.result || result);
+    return typeof output === "string" ? JSON.parse(output) : output;
   }
 
   async function loadTags(force) {
@@ -407,6 +431,47 @@
     }
   }
 
+  function magnificSearchUrl(tag) {
+    const query = encodeURIComponent((tag && tag.name) || state.search || "");
+    return `https://www.magnific.com/search?format=search&iconType=standard&last_filter=query&last_value=${query}&query=${query}&type=icon`;
+  }
+
+  async function loadMagnificIcon() {
+    const tag = selectedTag();
+    const query = (tag && tag.name) || state.search;
+    if (!query) return;
+    const apiKey = state.magnificApiKey.trim();
+    if (!apiKey) {
+      state.error = "Magnific API key ontbreekt. Vul hem in om automatisch icons op te halen.";
+      state.status = "";
+      render();
+      return;
+    }
+    state.saving = true;
+    state.error = "";
+    state.status = `Searching Magnific for ${query}...`;
+    render();
+    try {
+      const result = await pluginOperation({
+        action: "magnific-icon",
+        query,
+        apiKey,
+      });
+      if (!result || result.error) throw new Error((result && result.error) || "No Magnific result");
+      state.externalImage = result.imageData || "";
+      state.externalImageName = result.name ? `Magnific: ${result.name}` : `Magnific: ${query}`;
+      state.magnificResults = result.results || [];
+      state.magnificSelected = 0;
+      state.status = `Loaded Magnific icon for ${query}`;
+    } catch (error) {
+      state.error = error.message || String(error);
+      state.status = "";
+    } finally {
+      state.saving = false;
+      render();
+    }
+  }
+
   async function copyPrompt() {
     const tag = selectedTag();
     if (!tag) return;
@@ -421,7 +486,7 @@
   }
 
   function openMagnific() {
-    window.open("https://www.magnific.com/", "_blank", "noopener,noreferrer");
+    window.open(magnificSearchUrl(selectedTag()), "_blank", "noopener,noreferrer");
   }
 
   function shade(color, amount) {
@@ -1292,6 +1357,21 @@
 
   function renderExternalPicker(parent, tag) {
     const panel = el("div", "stash-tip-external");
+    const keyRow = el("div", "stash-tip-url-row");
+    const key = el("input", "stash-tip-search");
+    key.type = "password";
+    key.placeholder = "Magnific API key for automatic icon pickup";
+    key.value = state.magnificApiKey;
+    key.addEventListener("input", () => {
+      state.magnificApiKey = key.value;
+      localStorage.setItem("stash-tip-magnific-api-key", state.magnificApiKey);
+    });
+    const auto = el("button", "stash-tip-button save", state.saving ? "Loading..." : "Auto Magnific");
+    auto.type = "button";
+    auto.disabled = state.saving || !tag;
+    auto.addEventListener("click", loadMagnificIcon);
+    keyRow.append(key, auto);
+
     const actions = el("div", "stash-tip-options");
     const promptButton = el("button", "stash-tip-button", "Copy Magnific prompt");
     promptButton.type = "button";
@@ -1351,6 +1431,7 @@
     prompt.readOnly = true;
     prompt.value = tagPrompt(tag);
     panel.append(actions, urlRow, prompt);
+    panel.insertBefore(keyRow, actions);
     parent.appendChild(panel);
   }
 

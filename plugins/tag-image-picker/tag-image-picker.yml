@@ -1,0 +1,19 @@
+name: Tag Image Picker
+description: Search for candidate images and assign selected images to Stash tags.
+version: 0.1.0
+url: https://github.com/SJoWie80/Stash-Plugins
+exec:
+  - python
+  - "{pluginDir}/tag_image_picker_backend.py"
+interface: raw
+tasks:
+  - name: search
+    description: Search image candidates for a tag.
+ui:
+  javascript:
+    - tag-image-picker.js
+  css:
+    - tag-image-picker.css
+  csp:
+    connect-src:
+      - "'self'"

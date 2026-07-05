@@ -27,3 +27,13 @@
   metadata:
     description: Shows active Stash playback from browser sessions and server-side scene activity.
     url: https://github.com/SJoWie80/Stash-Plugins
+
+- id: tag-image-picker
+  name: Tag Image Picker
+  version: 0.1.0
+  date: 2026-07-05 21:35:00
+  path: packages/tag-image-picker-v0.1.0.zip
+  sha256: 741ccfcb0408027870300b2d6bf85db7fe1ec16cf3338576f2af56df0d16e93b
+  metadata:
+    description: Search image candidates and assign selected images to Stash tags.
+    url: https://github.com/SJoWie80/Stash-Plugins

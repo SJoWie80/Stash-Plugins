@@ -3,7 +3,6 @@
 
   const ROUTE = "/tag-image-picker";
   const NAV_ID = "stash-tip-nav";
-  const SETTINGS_NAV_ID = "stash-tip-settings-nav";
   const LAUNCHER_ID = "stash-tip-launcher";
   const APP_ID = "stash-tip-root";
   const DONE_TAGS_KEY = "stash-tip-done-tags-v1";
@@ -234,54 +233,8 @@
     }
   }
 
-  function findSettingsNav() {
-    const candidates = [];
-    const settingsLinks = Array.from(document.querySelectorAll("a[href*='settings'], a[href*='/settings']"));
-    settingsLinks.forEach((link) => {
-      const wrap = link.closest("nav, aside, ul, .nav, .navbar-nav, .list-group, [role='navigation'], [class*='sidebar'], [class*='Sidebar'], [class*='settings'], [class*='Settings']");
-      if (wrap) candidates.push(wrap);
-    });
-    candidates.push(...Array.from(document.querySelectorAll("nav, aside, .nav, .navbar-nav, .list-group, [role='navigation'], [class*='settings'], [class*='Settings']")));
-    const labels = ["Plugins", "Interface", "Security", "Tools", "System", "Metadata", "Library"];
-    return candidates.find((node) => {
-      if (!node || node.id === NAV_ID || node.id === SETTINGS_NAV_ID || node.querySelector(`#${SETTINGS_NAV_ID}`)) return false;
-      const text = node.textContent || "";
-      return labels.filter((label) => text.includes(label)).length >= 1;
-    });
-  }
-
-  function addSettingsNav() {
-    try {
-      const nav = findSettingsNav();
-      const existing = document.getElementById(SETTINGS_NAV_ID);
-      if (existing && existing.classList.contains("stash-tip-settings-shortcut") && !window.location.pathname.includes("/settings") && !nav) {
-        existing.remove();
-        return;
-      }
-      if (existing && (!nav || nav.contains(existing))) return;
-      if (!nav && !window.location.pathname.includes("/settings")) return;
-      const link = el("a", "nav-link list-group-item stash-tip-settings-button");
-      link.id = SETTINGS_NAV_ID;
-      link.href = ROUTE;
-      link.setAttribute("aria-label", "Tag Icon Studio");
-      link.appendChild(el("span", "fa fa-icons fas fa-shapes stash-tip-nav-icon"));
-      link.appendChild(el("span", "stash-tip-nav-text", "Tag Icon Studio"));
-      link.addEventListener("click", navigate);
-      if (nav) {
-        if (existing) existing.remove();
-        nav.appendChild(link);
-      } else {
-        link.className = "stash-tip-settings-shortcut";
-        document.body.appendChild(link);
-      }
-    } catch (error) {
-      console.error("[Tag Icon Studio] failed adding settings nav", error);
-    }
-  }
-
   function addMenuEntries() {
     addNav();
-    addSettingsNav();
   }
 
   function removeLauncher() {

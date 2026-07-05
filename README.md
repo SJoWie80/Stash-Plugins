@@ -22,7 +22,7 @@ Then open `Settings > Plugins`, reload plugin sources, and install the plugins y
 - `Chaturbate` - browse and watch Chaturbate cams inside Stash.
 - `Folder View` - browse scenes and galleries grouped by filesystem folder.
 - `Now Playing` - show active Stash web playback sessions reported by connected browsers.
-- `Tag Image Picker` - search image candidates and assign selected images to Stash tags.
+- `Tag Icon Studio` - generate consistent local icon artwork and assign it to Stash tags.
 
 ## Included Bridges
 

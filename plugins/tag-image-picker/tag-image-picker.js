@@ -7,26 +7,72 @@
   const APP_ID = "stash-tip-root";
   const PAGE_SIZE = 250;
   const MAX_PAGES = 80;
+  const TAGS_PER_PAGE = 40;
+  const ICON_SIZE = 512;
 
   const state = {
-    pluginId: "",
     tags: [],
     selectedTagId: "",
-    candidates: [],
-    selectedCandidate: null,
     loadingTags: false,
-    searching: false,
     saving: false,
     loaded: false,
     error: "",
     status: "",
     search: "",
-    onlyMissing: true,
-    provider: "wikimedia",
-    resultLimit: 12,
+    onlyMissing: false,
+    tagPage: 1,
+    style: "neon",
     routeRegistered: false,
     routeContainer: null,
   };
+
+  const THEMES = {
+    neon: { name: "Neon", bg: "#101318", fg: "#f4f7fb", muted: "#8090a6" },
+    dark: { name: "Dark", bg: "#151515", fg: "#f5efe7", muted: "#8b8177" },
+    punch: { name: "Punch", bg: "#171116", fg: "#fff4fb", muted: "#aa8fa0" },
+  };
+
+  const COLORS = {
+    body: "#ff6b9a",
+    action: "#ff4d5f",
+    oral: "#ff4d7d",
+    sex: "#ff3f6c",
+    anal: "#f27a3d",
+    cum: "#f8f2d8",
+    bondage: "#8b6cff",
+    clothing: "#47c5ff",
+    location: "#43d17a",
+    role: "#ffd166",
+    camera: "#64d2ff",
+    tech: "#4ee3ff",
+    mood: "#ff9f43",
+    relationship: "#f06595",
+    meta: "#b6c2d9",
+  };
+
+  const RULES = [
+    { icon: "tech", group: "tech", words: ["4k", "5k", "6k", "7k", "3k", "hd", "fps", "3d", "vr", "virtual reality", "180", "200", "220", "360"] },
+    { icon: "camera", group: "camera", words: ["pov", "close", "front", "sideview", "frontview", "rearview", "low angle", "plow cam", "fisheye", "camera"] },
+    { icon: "location", group: "location", words: ["bedroom", "bathroom", "kitchen", "office", "school", "classroom", "beach", "garden", "gym", "car", "pool", "spa", "field", "dungeon", "store", "prison", "home", "outdoors", "outside", "indoors", "stairs", "table", "desk", "couch", "bed", "bath", "shower"] },
+    { icon: "role", group: "role", words: ["teacher", "student", "nurse", "doctor", "maid", "cop", "boss", "secretary", "coach", "babysitter", "girlfriend", "wife", "husband", "boyfriend", "roomie", "neighbor", "tutor", "assistant", "bodyguard", "bartender", "barber", "delivery", "handyman", "military"] },
+    { icon: "bondage", group: "bondage", words: ["bdsm", "bondage", "handcuffs", "chains", "restraints", "leash", "collar", "gag", "blindfold", "clamps", "slave", "submission", "submissive", "domination", "femdom", "maledom", "punishment"] },
+    { icon: "toy", group: "sex", words: ["dildo", "vibrator", "hitachi", "magic wand", "butt plug", "sex toy", "toys", "object insertion", "fucking machines"] },
+    { icon: "cum", group: "cum", words: ["cum", "creampie", "facial", "swallowing", "drip", "cream"] },
+    { icon: "mouth", group: "oral", words: ["blowjob", "blow job", "oral", "deepthroat", "gagging", "mouth", "licking", "sucking", "rimming", "asslicking", "eats her out", "pussy eating", "face fuck"] },
+    { icon: "vulva", group: "sex", words: ["pussy", "clit", "vaginal", "labia", "tribbing", "scissoring", "squirting", "wet pussy", "innie"] },
+    { icon: "butt", group: "anal", words: ["anal", "ass", "butt", "bum", "gaping", "rim", "pawg", "bubble butt"] },
+    { icon: "penis", group: "sex", words: ["cock", "dick", "bbc", "uncircumcised", "circumcised", "trimmed dick", "erect"] },
+    { icon: "breasts", group: "body", words: ["tits", "boobs", "breast", "nipples", "areolas", "topless"] },
+    { icon: "feet", group: "body", words: ["feet", "foot", "toe", "barefoot", "socks", "heels", "peeptoe", "shoes", "boots", "sandals", "pumps", "wedges"] },
+    { icon: "hair", group: "body", words: ["hair", "blonde", "brunette", "red hair", "black hair", "braids", "ponytail", "pigtails", "dreadlocks", "hair bun"] },
+    { icon: "eye", group: "body", words: ["eyes", "contact", "glasses", "heterochromia"] },
+    { icon: "clothing", group: "clothing", words: ["lingerie", "bra", "panties", "thong", "dress", "skirt", "stockings", "pantyhose", "bikini", "uniform", "cosplay", "costume", "latex", "leather", "fishnet", "jeans", "shorts", "shirt", "hoodie", "robe", "underwear"] },
+    { icon: "group", group: "relationship", words: ["lesbian", "threesome", "foursome", "gangbang", "group", "orgy", "couple", "multiple", "twosome", "interracial"] },
+    { icon: "heart", group: "mood", words: ["romantic", "passion", "intimate", "aftercare", "cuddling", "kissing", "girlfriend", "adorable", "shy", "innocent"] },
+    { icon: "flame", group: "action", words: ["hardcore", "rough", "aggressive", "hard fuck", "deep", "slapping", "spanking", "choking", "hair pulling", "dirty talk", "kinky", "fetish"] },
+    { icon: "person", group: "body", words: ["asian", "black", "white", "latin", "latina", "trans", "woman", "man", "milf", "mature", "teen", "young", "athletic", "bbw", "skinny", "slim", "curvy", "muscular", "tall", "short"] },
+    { icon: "star", group: "meta", words: ["favourite", "favorite", "watch later", "available", "quality", "collection", "process", "feature", "series"] },
+  ];
 
   function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -37,6 +83,10 @@
 
   function clear(node) {
     while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  function normalize(value) {
+    return String(value || "").toLowerCase().replace(/[–—]/g, "-");
   }
 
   function isRoute() {
@@ -89,15 +139,15 @@
       wrap.id = NAV_ID;
       const link = el("a", "nav-link stash-tip-nav-button");
       link.href = ROUTE;
-      link.setAttribute("aria-label", "Tag Images");
-      link.appendChild(el("span", "fa fa-image fas fa-image stash-tip-nav-icon"));
-      link.appendChild(el("span", "stash-tip-nav-text", "Tag Images"));
+      link.setAttribute("aria-label", "Tag Icons");
+      link.appendChild(el("span", "fa fa-icons fas fa-shapes stash-tip-nav-icon"));
+      link.appendChild(el("span", "stash-tip-nav-text", "Tag Icons"));
       link.addEventListener("click", navigate);
       wrap.appendChild(link);
       nav.appendChild(wrap);
       removeLauncher();
     } catch (error) {
-      console.error("[Tag Image Picker] failed adding nav", error);
+      console.error("[Tag Icon Studio] failed adding nav", error);
     }
   }
 
@@ -108,7 +158,7 @@
 
   function addLauncher() {
     if (document.getElementById(NAV_ID) || document.getElementById(LAUNCHER_ID)) return;
-    const launcher = el("button", "stash-tip-launcher", "Tag Images");
+    const launcher = el("button", "stash-tip-launcher", "Tag Icons");
     launcher.id = LAUNCHER_ID;
     launcher.type = "button";
     launcher.addEventListener("click", navigate);
@@ -140,26 +190,6 @@
     return payload.data;
   }
 
-  async function getPluginId() {
-    if (state.pluginId) return state.pluginId;
-    const data = await graphql("query TagImagePickerPluginId { plugins { id name } }", {});
-    const plugin = ((data && data.plugins) || []).find((item) => item && item.name === "Tag Image Picker");
-    if (!plugin || !plugin.id) throw new Error("Tag Image Picker plugin ID kon niet worden gevonden");
-    state.pluginId = plugin.id;
-    return state.pluginId;
-  }
-
-  async function pluginOperation(args) {
-    const pluginId = await getPluginId();
-    const data = await graphql(
-      "mutation TagImagePickerOperation($pluginId: ID!, $args: Map) { runPluginOperation(plugin_id: $pluginId, args: $args) }",
-      { pluginId, args }
-    );
-    const result = data && data.runPluginOperation;
-    const output = result && (result.output || result.result || result);
-    return typeof output === "string" ? JSON.parse(output) : output;
-  }
-
   async function loadTags(force) {
     if (state.loaded && !force) return;
     state.loadingTags = true;
@@ -167,24 +197,21 @@
     state.status = "Loading tags...";
     render();
     try {
-      const all = await loadTagsPaged(true);
+      let all;
+      try {
+        all = await loadTagsPaged(true);
+      } catch (fullError) {
+        console.warn("[Tag Icon Studio] full tag query failed, trying basic query", fullError);
+        all = await loadTagsPaged(false);
+      }
       state.tags = all;
       state.loaded = true;
       if (!state.selectedTagId && filteredTags().length) state.selectedTagId = filteredTags()[0].id;
       state.status = `${all.length} tags loaded`;
-    } catch (fullError) {
-      try {
-        console.warn("[Tag Image Picker] full tag query failed, trying basic query", fullError);
-        const all = await loadTagsPaged(false);
-        state.tags = all;
-        state.loaded = true;
-        if (!state.selectedTagId && filteredTags().length) state.selectedTagId = filteredTags()[0].id;
-        state.status = `${all.length} tags loaded`;
-      } catch (error) {
-        state.error = error.message || String(error);
-        state.status = "";
-        console.error("[Tag Image Picker] load tags failed", error);
-      }
+    } catch (error) {
+      state.error = error.message || String(error);
+      state.status = "";
+      console.error("[Tag Icon Studio] load tags failed", error);
     } finally {
       state.loadingTags = false;
       render();
@@ -193,43 +220,32 @@
 
   async function loadTagsPaged(includeCounts) {
     const all = [];
-      let total = 0;
-      for (let page = 1; page <= MAX_PAGES; page += 1) {
-        state.status = `Loading tags page ${page}...`;
-        render();
-        const data = await graphql(
-          includeCounts
-            ? `query TagImagePickerTags($filter: FindFilterType) {
-            findTags(filter: $filter) {
-              count
-              tags {
-                id
-                name
-                image_path
-                scene_count
-                scene_marker_count
-                image_count
-              }
-            }
-          }`
-            : `query TagImagePickerTagsBasic($filter: FindFilterType) {
-            findTags(filter: $filter) {
-              count
-              tags {
-                id
-                name
-                image_path
-              }
-            }
-          }`,
-          { filter: { page, per_page: PAGE_SIZE, sort: "name", direction: "ASC" } }
-        );
-        const result = data && data.findTags;
-        const tags = (result && result.tags) || [];
-        total = result && typeof result.count === "number" ? result.count : all.length + tags.length;
-        all.push(...tags);
-        if (!tags.length || all.length >= total || tags.length < PAGE_SIZE) break;
-      }
+    let total = 0;
+    for (let page = 1; page <= MAX_PAGES; page += 1) {
+      state.status = `Loading tags page ${page}...`;
+      render();
+      const data = await graphql(
+        includeCounts
+          ? `query TagIconStudioTags($filter: FindFilterType) {
+          findTags(filter: $filter) {
+            count
+            tags { id name image_path scene_count scene_marker_count image_count }
+          }
+        }`
+          : `query TagIconStudioTagsBasic($filter: FindFilterType) {
+          findTags(filter: $filter) {
+            count
+            tags { id name image_path }
+          }
+        }`,
+        { filter: { page, per_page: PAGE_SIZE, sort: "name", direction: "ASC" } }
+      );
+      const result = data && data.findTags;
+      const tags = (result && result.tags) || [];
+      total = result && typeof result.count === "number" ? result.count : all.length + tags.length;
+      all.push(...tags);
+      if (!tags.length || all.length >= total || tags.length < PAGE_SIZE) break;
+    }
     return all;
   }
 
@@ -242,74 +258,545 @@
   }
 
   function filteredTags() {
-    const term = state.search.trim().toLowerCase();
+    const term = normalize(state.search);
     return state.tags
       .filter((tag) => !state.onlyMissing || !tag.image_path)
-      .filter((tag) => !term || String(tag.name || "").toLowerCase().includes(term))
+      .filter((tag) => !term || normalize(tag.name).includes(term))
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   }
 
-  async function searchImages() {
+  function classifyTag(name) {
+    const text = normalize(name);
+    const rule = RULES.find((item) => item.words.some((word) => text.includes(word)));
+    if (rule) return rule;
+    return { icon: "tag", group: "meta" };
+  }
+
+  function hashString(input) {
+    let hash = 2166136261;
+    for (let index = 0; index < input.length; index += 1) {
+      hash ^= input.charCodeAt(index);
+      hash = Math.imul(hash, 16777619);
+    }
+    return hash >>> 0;
+  }
+
+  function accentFor(tag, group) {
+    if (COLORS[group]) return COLORS[group];
+    const hue = hashString(tag.name || "") % 360;
+    return `hsl(${hue} 78% 62%)`;
+  }
+
+  function drawIcon(tag, style) {
+    const canvas = document.createElement("canvas");
+    canvas.width = ICON_SIZE;
+    canvas.height = ICON_SIZE;
+    const ctx = canvas.getContext("2d");
+    const rule = classifyTag(tag.name);
+    const theme = THEMES[style] || THEMES.neon;
+    const accent = accentFor(tag, rule.group);
+    const secondary = shade(accent, -18);
+
+    drawBackground(ctx, theme, accent, tag.name);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    drawSymbol(ctx, rule.icon, accent, secondary, theme.fg);
+    drawCornerGlyph(ctx, rule.group, accent, theme);
+    return canvas.toDataURL("image/png");
+  }
+
+  function shade(color, amount) {
+    const tmp = document.createElement("canvas").getContext("2d");
+    tmp.fillStyle = color;
+    const normalized = tmp.fillStyle;
+    const match = normalized.match(/^#([0-9a-f]{6})$/i);
+    if (!match) return color;
+    const value = match[1];
+    const next = [0, 2, 4]
+      .map((offset) => Math.max(0, Math.min(255, parseInt(value.slice(offset, offset + 2), 16) + amount)))
+      .map((part) => part.toString(16).padStart(2, "0"))
+      .join("");
+    return `#${next}`;
+  }
+
+  function drawBackground(ctx, theme, accent, seed) {
+    ctx.fillStyle = theme.bg;
+    roundRect(ctx, 0, 0, ICON_SIZE, ICON_SIZE, 54);
+    ctx.fill();
+    const gradient = ctx.createRadialGradient(360, 120, 20, 360, 120, 390);
+    gradient.addColorStop(0, withAlpha(accent, 0.38));
+    gradient.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, ICON_SIZE, ICON_SIZE);
+    ctx.strokeStyle = withAlpha(accent, 0.34);
+    ctx.lineWidth = 6;
+    roundRect(ctx, 16, 16, 480, 480, 42);
+    ctx.stroke();
+
+    const hash = hashString(seed || "");
+    ctx.strokeStyle = withAlpha(accent, 0.12);
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 8; i += 1) {
+      const x = 60 + ((hash >> (i * 3)) % 390);
+      ctx.beginPath();
+      ctx.moveTo(x, 34);
+      ctx.lineTo(x - 150, 478);
+      ctx.stroke();
+    }
+  }
+
+  function withAlpha(color, alpha) {
+    const tmp = document.createElement("canvas").getContext("2d");
+    tmp.fillStyle = color;
+    const normalized = tmp.fillStyle;
+    const match = normalized.match(/^#([0-9a-f]{6})$/i);
+    if (!match) return color;
+    const hex = match[1];
+    return `rgba(${parseInt(hex.slice(0, 2), 16)}, ${parseInt(hex.slice(2, 4), 16)}, ${parseInt(hex.slice(4, 6), 16)}, ${alpha})`;
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function drawSymbol(ctx, icon, accent, secondary, fg) {
+    ctx.save();
+    ctx.translate(256, 264);
+    ctx.strokeStyle = fg;
+    ctx.fillStyle = accent;
+    ctx.lineWidth = 18;
+    const draw = {
+      breasts: drawBreasts,
+      butt: drawButt,
+      vulva: drawVulva,
+      penis: drawPenis,
+      mouth: drawMouth,
+      cum: drawCum,
+      bondage: drawBondage,
+      toy: drawToy,
+      feet: drawFeet,
+      hair: drawHair,
+      eye: drawEye,
+      clothing: drawClothing,
+      location: drawLocation,
+      role: drawRole,
+      camera: drawCamera,
+      tech: drawTech,
+      group: drawGroup,
+      heart: drawHeart,
+      flame: drawFlame,
+      person: drawPerson,
+      star: drawStar,
+      tag: drawTag,
+    };
+    (draw[icon] || drawTag)(ctx, accent, secondary, fg);
+    ctx.restore();
+  }
+
+  function drawBreasts(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.82);
+    ellipse(ctx, -70, 20, 80, 105);
+    ellipse(ctx, 70, 20, 80, 105);
+    ctx.fillStyle = secondary;
+    circle(ctx, -70, 42, 13);
+    circle(ctx, 70, 42, 13);
+    ctx.strokeStyle = fg;
+    ctx.beginPath();
+    ctx.moveTo(-118, 0);
+    ctx.quadraticCurveTo(-40, -128, 0, -42);
+    ctx.quadraticCurveTo(40, -128, 118, 0);
+    ctx.stroke();
+  }
+
+  function drawButt(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.84);
+    ellipse(ctx, -62, 18, 88, 120);
+    ellipse(ctx, 62, 18, 88, 120);
+    ctx.strokeStyle = fg;
+    ctx.beginPath();
+    ctx.moveTo(0, -92);
+    ctx.quadraticCurveTo(0, -10, 0, 132);
+    ctx.stroke();
+  }
+
+  function drawVulva(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.84);
+    ctx.beginPath();
+    ctx.moveTo(0, -135);
+    ctx.bezierCurveTo(105, -56, 105, 83, 0, 142);
+    ctx.bezierCurveTo(-105, 83, -105, -56, 0, -135);
+    ctx.fill();
+    ctx.strokeStyle = fg;
+    ctx.beginPath();
+    ctx.moveTo(0, -80);
+    ctx.bezierCurveTo(42, -24, 40, 54, 0, 96);
+    ctx.bezierCurveTo(-40, 54, -42, -24, 0, -80);
+    ctx.stroke();
+  }
+
+  function drawPenis(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.84);
+    roundRect(ctx, -38, -128, 76, 210, 38);
+    ctx.fill();
+    circle(ctx, -52, 108, 50);
+    circle(ctx, 52, 108, 50);
+    ctx.strokeStyle = fg;
+    ctx.beginPath();
+    ctx.moveTo(0, -128);
+    ctx.lineTo(0, 76);
+    ctx.stroke();
+  }
+
+  function drawMouth(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.86);
+    ctx.beginPath();
+    ctx.moveTo(-145, 0);
+    ctx.quadraticCurveTo(-60, -82, 0, -25);
+    ctx.quadraticCurveTo(60, -82, 145, 0);
+    ctx.quadraticCurveTo(56, 72, 0, 42);
+    ctx.quadraticCurveTo(-56, 72, -145, 0);
+    ctx.fill();
+    ctx.strokeStyle = fg;
+    ctx.beginPath();
+    ctx.moveTo(-120, 4);
+    ctx.quadraticCurveTo(0, 42, 120, 4);
+    ctx.stroke();
+  }
+
+  function drawCum(ctx, accent, secondary, fg) {
+    ctx.fillStyle = "#f6f1de";
+    blob(ctx, [[0, -135], [86, -80], [62, 42], [0, 145], [-72, 55], [-88, -76]]);
+    ctx.strokeStyle = fg;
+    ctx.lineWidth = 12;
+    ctx.stroke();
+    ctx.fillStyle = secondary;
+    circle(ctx, 92, 94, 28);
+    circle(ctx, -108, 20, 22);
+  }
+
+  function drawBondage(ctx, accent, secondary, fg) {
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 30;
+    circleStroke(ctx, -70, 14, 72);
+    circleStroke(ctx, 70, 14, 72);
+    ctx.strokeStyle = fg;
+    ctx.lineWidth = 18;
+    ctx.beginPath();
+    ctx.moveTo(-12, 14);
+    ctx.lineTo(12, 14);
+    ctx.stroke();
+    ctx.strokeStyle = secondary;
+    ctx.beginPath();
+    ctx.moveTo(-125, -88);
+    ctx.lineTo(125, -88);
+    ctx.stroke();
+  }
+
+  function drawToy(ctx, accent, secondary, fg) {
+    ctx.save();
+    ctx.rotate(-0.52);
+    ctx.fillStyle = withAlpha(accent, 0.86);
+    roundRect(ctx, -42, -142, 84, 245, 42);
+    ctx.fill();
+    ctx.fillStyle = secondary;
+    roundRect(ctx, -30, 96, 60, 62, 18);
+    ctx.fill();
+    ctx.restore();
+    ctx.strokeStyle = fg;
+    ctx.lineWidth = 12;
+    circleStroke(ctx, 86, -106, 24);
+  }
+
+  function drawFeet(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.84);
+    ellipse(ctx, -54, 18, 55, 135);
+    ellipse(ctx, 58, 18, 55, 135);
+    for (let i = 0; i < 5; i += 1) {
+      circle(ctx, -100 + i * 20, -108 + Math.abs(i - 2) * 5, 9);
+      circle(ctx, 18 + i * 20, -108 + Math.abs(i - 2) * 5, 9);
+    }
+  }
+
+  function drawHair(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.86);
+    ctx.beginPath();
+    ctx.arc(0, -20, 126, Math.PI, 0);
+    ctx.bezierCurveTo(120, 120, 54, 145, 0, 85);
+    ctx.bezierCurveTo(-54, 145, -120, 120, -126, -20);
+    ctx.fill();
+    ctx.strokeStyle = fg;
+    ctx.beginPath();
+    ctx.moveTo(-52, -126);
+    ctx.bezierCurveTo(-22, -40, -72, 40, -42, 120);
+    ctx.moveTo(45, -126);
+    ctx.bezierCurveTo(18, -42, 66, 38, 38, 120);
+    ctx.stroke();
+  }
+
+  function drawEye(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.55);
+    ctx.beginPath();
+    ctx.moveTo(-150, 0);
+    ctx.quadraticCurveTo(0, -118, 150, 0);
+    ctx.quadraticCurveTo(0, 118, -150, 0);
+    ctx.fill();
+    ctx.fillStyle = fg;
+    circle(ctx, 0, 0, 62);
+    ctx.fillStyle = accent;
+    circle(ctx, 0, 0, 34);
+  }
+
+  function drawClothing(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.84);
+    ctx.beginPath();
+    ctx.moveTo(-108, -110);
+    ctx.lineTo(-30, -138);
+    ctx.lineTo(0, -88);
+    ctx.lineTo(30, -138);
+    ctx.lineTo(108, -110);
+    ctx.lineTo(74, 132);
+    ctx.lineTo(-74, 132);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = fg;
+    ctx.beginPath();
+    ctx.moveTo(-62, 8);
+    ctx.lineTo(62, 8);
+    ctx.stroke();
+  }
+
+  function drawLocation(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.84);
+    ctx.beginPath();
+    ctx.moveTo(0, -150);
+    ctx.bezierCurveTo(95, -150, 145, -55, 102, 24);
+    ctx.lineTo(0, 150);
+    ctx.lineTo(-102, 24);
+    ctx.bezierCurveTo(-145, -55, -95, -150, 0, -150);
+    ctx.fill();
+    ctx.fillStyle = fg;
+    circle(ctx, 0, -45, 44);
+  }
+
+  function drawRole(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.84);
+    circle(ctx, 0, -86, 55);
+    roundRect(ctx, -100, -15, 200, 150, 48);
+    ctx.fill();
+    ctx.strokeStyle = fg;
+    ctx.beginPath();
+    ctx.moveTo(-95, -20);
+    ctx.lineTo(0, 35);
+    ctx.lineTo(95, -20);
+    ctx.stroke();
+  }
+
+  function drawCamera(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.84);
+    roundRect(ctx, -142, -80, 284, 190, 32);
+    ctx.fill();
+    roundRect(ctx, -86, -128, 86, 55, 18);
+    ctx.fill();
+    ctx.fillStyle = fg;
+    circle(ctx, 20, 15, 62);
+    ctx.fillStyle = secondary;
+    circle(ctx, 20, 15, 34);
+  }
+
+  function drawTech(ctx, accent, secondary, fg) {
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 22;
+    roundRect(ctx, -130, -110, 260, 220, 34);
+    ctx.stroke();
+    ctx.strokeStyle = fg;
+    ctx.beginPath();
+    ctx.moveTo(-70, -35);
+    ctx.lineTo(70, -35);
+    ctx.moveTo(-70, 20);
+    ctx.lineTo(70, 20);
+    ctx.moveTo(-70, 75);
+    ctx.lineTo(30, 75);
+    ctx.stroke();
+  }
+
+  function drawGroup(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.84);
+    circle(ctx, -72, -55, 42);
+    circle(ctx, 72, -55, 42);
+    circle(ctx, 0, -95, 45);
+    roundRect(ctx, -135, 0, 110, 130, 35);
+    roundRect(ctx, 25, 0, 110, 130, 35);
+    roundRect(ctx, -62, -10, 124, 150, 40);
+    ctx.fill();
+  }
+
+  function drawHeart(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.88);
+    ctx.beginPath();
+    ctx.moveTo(0, 125);
+    ctx.bezierCurveTo(-145, 25, -145, -100, -45, -100);
+    ctx.bezierCurveTo(0, -100, 0, -62, 0, -62);
+    ctx.bezierCurveTo(0, -62, 0, -100, 45, -100);
+    ctx.bezierCurveTo(145, -100, 145, 25, 0, 125);
+    ctx.fill();
+  }
+
+  function drawFlame(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.88);
+    ctx.beginPath();
+    ctx.moveTo(10, -150);
+    ctx.bezierCurveTo(130, -35, 65, 30, 120, 95);
+    ctx.bezierCurveTo(45, 165, -95, 120, -105, 10);
+    ctx.bezierCurveTo(-110, -48, -55, -90, 10, -150);
+    ctx.fill();
+    ctx.fillStyle = secondary;
+    ctx.beginPath();
+    ctx.moveTo(0, -42);
+    ctx.bezierCurveTo(55, 18, 26, 82, -10, 112);
+    ctx.bezierCurveTo(-45, 76, -42, 12, 0, -42);
+    ctx.fill();
+  }
+
+  function drawPerson(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.84);
+    circle(ctx, 0, -92, 58);
+    roundRect(ctx, -90, -15, 180, 158, 60);
+    ctx.fill();
+    ctx.strokeStyle = fg;
+    ctx.beginPath();
+    ctx.moveTo(-48, 45);
+    ctx.lineTo(48, 45);
+    ctx.stroke();
+  }
+
+  function drawStar(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.88);
+    ctx.beginPath();
+    for (let i = 0; i < 10; i += 1) {
+      const radius = i % 2 ? 58 : 145;
+      const angle = -Math.PI / 2 + (i * Math.PI) / 5;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawTag(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.84);
+    ctx.beginPath();
+    ctx.moveTo(-120, -120);
+    ctx.lineTo(35, -120);
+    ctx.lineTo(140, -15);
+    ctx.lineTo(-15, 140);
+    ctx.lineTo(-120, 35);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = fg;
+    circle(ctx, -55, -58, 20);
+  }
+
+  function circle(ctx, x, y, radius) {
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function circleStroke(ctx, x, y, radius) {
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  function ellipse(ctx, x, y, rx, ry) {
+    ctx.beginPath();
+    ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function blob(ctx, points) {
+    ctx.beginPath();
+    points.forEach(([x, y], index) => {
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawCornerGlyph(ctx, group, accent, theme) {
+    ctx.save();
+    ctx.translate(402, 402);
+    ctx.fillStyle = withAlpha(accent, 0.22);
+    roundRect(ctx, -54, -54, 108, 108, 28);
+    ctx.fill();
+    ctx.fillStyle = theme.fg;
+    ctx.font = "700 34px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const label = { tech: "4K", camera: "POV", location: "LOC", role: "ID", bondage: "X", sex: "+", body: "B", oral: "O", anal: "A", cum: "*", clothing: "C", relationship: "2+", mood: "♥", action: "!", meta: "#" }[group] || "#";
+    ctx.fillText(label, 0, 2);
+    ctx.restore();
+  }
+
+  async function saveGenerated() {
     const tag = selectedTag();
     if (!tag) return;
-    state.searching = true;
+    state.saving = true;
     state.error = "";
-    state.status = `Searching images for ${tag.name}...`;
-    state.candidates = [];
-    state.selectedCandidate = null;
+    state.status = `Saving icon for ${tag.name}...`;
     render();
     try {
-      const output = await pluginOperation({
-        action: "search",
-        query: tag.name,
-        provider: state.provider,
-        limit: state.resultLimit,
-      });
-      state.candidates = (output && output.results) || [];
-      state.status = `${state.candidates.length} candidates for ${tag.name}`;
-      if (output && output.errors && output.errors.length) {
-        state.status += `; ${output.errors.length} provider warning${output.errors.length === 1 ? "" : "s"}`;
-      }
+      const image = drawIcon(tag, state.style);
+      const updated = await updateTagImage(tag.id, image);
+      tag.image_path = (updated && updated.image_path) || image;
+      state.status = `Saved icon for ${tag.name}`;
     } catch (error) {
       state.error = error.message || String(error);
       state.status = "";
-      console.error("[Tag Image Picker] search failed", error);
+      console.error("[Tag Icon Studio] save failed", error);
     } finally {
-      state.searching = false;
+      state.saving = false;
       render();
     }
   }
 
-  async function saveSelected() {
-    const tag = selectedTag();
-    const candidate = state.selectedCandidate;
-    if (!tag || !candidate) return;
-    state.saving = true;
-    state.error = "";
-    state.status = `Saving image for ${tag.name}...`;
-    render();
+  async function updateTagImage(id, image) {
     try {
       const data = await graphql(
-        `mutation TagImagePickerUpdate($id: ID!, $image: String!) {
+        `mutation TagIconStudioUpdate($id: ID!, $image: String!) {
           tagUpdate(input: { id: $id, image: $image }) {
             id
             name
             image_path
           }
         }`,
-        { id: tag.id, image: candidate.imageUrl }
+        { id, image }
       );
-      const updated = data && data.tagUpdate;
-      tag.image_path = (updated && updated.image_path) || candidate.imageUrl;
-      state.status = `Saved image for ${tag.name}`;
-      state.selectedCandidate = null;
-    } catch (error) {
-      state.error = error.message || String(error);
-      state.status = "";
-      console.error("[Tag Image Picker] save failed", error);
-    } finally {
-      state.saving = false;
-      render();
+      return data && data.tagUpdate;
+    } catch (directError) {
+      console.warn("[Tag Icon Studio] direct tagUpdate shape failed, trying wrapped shape", directError);
+      const data = await graphql(
+        `mutation TagIconStudioUpdateWrapped($id: ID!, $image: String!) {
+          tagUpdate(input: { id: $id, image: $image }) {
+            tag {
+              id
+              name
+              image_path
+            }
+          }
+        }`,
+        { id, image }
+      );
+      return data && data.tagUpdate && data.tagUpdate.tag;
     }
   }
 
@@ -321,12 +808,9 @@
     search.value = state.search;
     search.addEventListener("input", () => {
       state.search = search.value;
+      state.tagPage = 1;
       const visible = filteredTags();
-      if (!visible.some((tag) => tag.id === state.selectedTagId)) {
-        state.selectedTagId = visible[0] ? visible[0].id : "";
-        state.candidates = [];
-        state.selectedCandidate = null;
-      }
+      if (!visible.some((tag) => tag.id === state.selectedTagId)) state.selectedTagId = visible[0] ? visible[0].id : "";
       render();
     });
 
@@ -336,6 +820,7 @@
     missingInput.checked = state.onlyMissing;
     missingInput.addEventListener("change", () => {
       state.onlyMissing = missingInput.checked;
+      state.tagPage = 1;
       const visible = filteredTags();
       if (!visible.some((tag) => tag.id === state.selectedTagId)) state.selectedTagId = visible[0] ? visible[0].id : "";
       render();
@@ -349,90 +834,70 @@
     parent.appendChild(toolbar);
   }
 
-  function renderOptions(parent) {
-    const options = el("div", "stash-tip-options");
-    const provider = el("select", "stash-tip-select");
-    [
-      ["wikimedia", "Wikimedia"],
-      ["duckduckgo", "DuckDuckGo"],
-      ["all", "Both"],
-    ].forEach(([value, label]) => {
-      const option = el("option", "", label);
-      option.value = value;
-      option.selected = value === state.provider;
-      provider.appendChild(option);
-    });
-    provider.addEventListener("change", () => {
-      state.provider = provider.value;
-    });
-
-    const limit = el("select", "stash-tip-select");
-    [8, 12, 20, 32].forEach((value) => {
-      const option = el("option", "", `${value} photos`);
-      option.value = String(value);
-      option.selected = value === state.resultLimit;
-      limit.appendChild(option);
-    });
-    limit.addEventListener("change", () => {
-      state.resultLimit = Number(limit.value) || 12;
-    });
-
-    const search = el("button", "stash-tip-button primary", state.searching ? "Searching..." : "Find photos");
-    search.type = "button";
-    search.disabled = state.searching || !selectedTag();
-    search.addEventListener("click", searchImages);
-    const save = el("button", "stash-tip-button save", state.saving ? "Saving..." : "Use selected");
-    save.type = "button";
-    save.disabled = state.saving || !state.selectedCandidate;
-    save.addEventListener("click", saveSelected);
-    options.append(provider, limit, search, save);
-    parent.appendChild(options);
-  }
-
   function renderTags(parent) {
     const list = el("aside", "stash-tip-tags");
     const tags = filteredTags();
+    const totalPages = Math.max(1, Math.ceil(tags.length / TAGS_PER_PAGE));
+    state.tagPage = Math.min(Math.max(1, state.tagPage), totalPages);
+    const start = (state.tagPage - 1) * TAGS_PER_PAGE;
+    const pageTags = tags.slice(start, start + TAGS_PER_PAGE);
+    const pager = el("div", "stash-tip-pager");
+    const previous = el("button", "stash-tip-page-button", "Prev");
+    previous.type = "button";
+    previous.disabled = state.tagPage <= 1;
+    previous.addEventListener("click", () => {
+      state.tagPage = Math.max(1, state.tagPage - 1);
+      render();
+    });
+    const label = el("span", "stash-tip-page-label", `${tags.length} tags - page ${state.tagPage} / ${totalPages}`);
+    const next = el("button", "stash-tip-page-button", "Next");
+    next.type = "button";
+    next.disabled = state.tagPage >= totalPages;
+    next.addEventListener("click", () => {
+      state.tagPage = Math.min(totalPages, state.tagPage + 1);
+      render();
+    });
+    pager.append(previous, label, next);
+    list.appendChild(pager);
     if (!tags.length) {
       list.appendChild(el("div", "stash-tip-empty", "No matching tags"));
       parent.appendChild(list);
       return;
     }
-    tags.forEach((tag) => {
+    pageTags.forEach((tag) => {
       const row = el("button", "stash-tip-tag");
       row.type = "button";
       row.setAttribute("aria-pressed", String(tag.id === state.selectedTagId));
       row.addEventListener("click", () => {
         state.selectedTagId = tag.id;
-        state.candidates = [];
-        state.selectedCandidate = null;
         render();
       });
       row.appendChild(el("span", "stash-tip-tag-name", tag.name));
-      const meta = el("span", "stash-tip-tag-meta", tag.image_path ? "image" : `${tagUsage(tag)} uses`);
-      row.appendChild(meta);
+      row.appendChild(el("span", "stash-tip-tag-meta", tag.image_path ? "image" : `${tagUsage(tag)} uses`));
       list.appendChild(row);
     });
     parent.appendChild(list);
   }
 
-  function renderCandidate(parent, candidate, index) {
-    const card = el("button", "stash-tip-candidate");
-    card.type = "button";
-    card.setAttribute("aria-pressed", String(state.selectedCandidate === candidate));
-    card.addEventListener("click", () => {
-      state.selectedCandidate = candidate;
+  function renderStylePicker(parent) {
+    const controls = el("div", "stash-tip-options");
+    const style = el("select", "stash-tip-select");
+    Object.entries(THEMES).forEach(([value, theme]) => {
+      const option = el("option", "", theme.name);
+      option.value = value;
+      option.selected = value === state.style;
+      style.appendChild(option);
+    });
+    style.addEventListener("change", () => {
+      state.style = style.value;
       render();
     });
-    const img = el("img", "stash-tip-thumb");
-    img.src = candidate.thumbData || candidate.thumbUrl || candidate.imageUrl;
-    img.alt = candidate.title || `Candidate ${index + 1}`;
-    img.loading = "lazy";
-    card.appendChild(img);
-    const body = el("span", "stash-tip-card-body");
-    body.appendChild(el("span", "stash-tip-card-title", candidate.title || `Candidate ${index + 1}`));
-    body.appendChild(el("span", "stash-tip-card-provider", candidate.provider || ""));
-    card.appendChild(body);
-    parent.appendChild(card);
+    const apply = el("button", "stash-tip-button save", state.saving ? "Saving..." : "Apply icon");
+    apply.type = "button";
+    apply.disabled = state.saving || !selectedTag();
+    apply.addEventListener("click", saveGenerated);
+    controls.append(style, apply);
+    parent.appendChild(controls);
   }
 
   function renderWork(parent) {
@@ -440,21 +905,33 @@
     const tag = selectedTag();
     const heading = el("div", "stash-tip-heading");
     heading.appendChild(el("h2", "", tag ? tag.name : "Select a tag"));
-    heading.appendChild(el("div", "stash-tip-subtle", tag ? `${tagUsage(tag)} linked objects` : "Choose a tag from the list"));
+    heading.appendChild(el("div", "stash-tip-subtle", tag ? `${tagUsage(tag)} linked objects - ${classifyTag(tag.name).icon}` : "Choose a tag from the list"));
     section.appendChild(heading);
-    if (tag && tag.image_path) {
-      const current = el("div", "stash-tip-current");
-      const img = el("img", "");
-      img.src = tag.image_path;
-      img.alt = tag.name;
-      current.append(img, el("span", "", "Current tag image"));
-      section.appendChild(current);
+    renderStylePicker(section);
+    const previewRow = el("div", "stash-tip-preview-row");
+    const generated = el("div", "stash-tip-preview-card");
+    generated.appendChild(el("h3", "", "Generated"));
+    if (tag) {
+      const img = el("img", "stash-tip-preview");
+      img.src = drawIcon(tag, state.style);
+      img.alt = `${tag.name} generated icon`;
+      generated.appendChild(img);
+    } else {
+      generated.appendChild(el("div", "stash-tip-empty", "No tag selected"));
     }
-    renderOptions(section);
-    if (state.searching) section.appendChild(el("div", "stash-tip-empty", "Searching image candidates..."));
-    const grid = el("div", "stash-tip-grid");
-    state.candidates.forEach((candidate, index) => renderCandidate(grid, candidate, index));
-    section.appendChild(grid);
+    previewRow.appendChild(generated);
+    const current = el("div", "stash-tip-preview-card");
+    current.appendChild(el("h3", "", "Current"));
+    if (tag && tag.image_path) {
+      const img = el("img", "stash-tip-preview");
+      img.src = tag.image_path;
+      img.alt = `${tag.name} current image`;
+      current.appendChild(img);
+    } else {
+      current.appendChild(el("div", "stash-tip-empty", "No current image"));
+    }
+    previewRow.appendChild(current);
+    section.appendChild(previewRow);
     parent.appendChild(section);
   }
 
@@ -463,8 +940,8 @@
     clear(container);
     const shell = el("section", "stash-tip-shell");
     const header = el("div", "stash-tip-titlebar");
-    header.appendChild(el("h1", "", "Tag Image Picker"));
-    header.appendChild(el("p", "", "Search candidates, pick one, and save it as the tag image."));
+    header.appendChild(el("h1", "", "Tag Icon Studio"));
+    header.appendChild(el("p", "", "Generate consistent local icons for tags."));
     shell.appendChild(header);
     renderToolbar(shell);
     if (state.error) shell.appendChild(el("div", "stash-tip-error", state.error));
@@ -497,7 +974,7 @@
       app.hidden = false;
       renderInto(app);
     } catch (error) {
-      console.error("[Tag Image Picker] render failed", error);
+      console.error("[Tag Icon Studio] render failed", error);
     }
   }
 
@@ -507,7 +984,7 @@
     window.__stashTagImagePickerRouteRegistered = true;
     state.routeRegistered = true;
     const React = api.React;
-    function TagImagePickerPage() {
+    function TagIconStudioPage() {
       const ref = React.useRef(null);
       React.useEffect(() => {
         if (!ref.current) return undefined;
@@ -519,7 +996,7 @@
       });
       return React.createElement("div", { id: APP_ID, ref });
     }
-    api.register.route(ROUTE, TagImagePickerPage);
+    api.register.route(ROUTE, TagIconStudioPage);
   }
 
   function install() {

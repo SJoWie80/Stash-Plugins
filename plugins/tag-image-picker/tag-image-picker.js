@@ -51,6 +51,12 @@
   };
 
   const RULES = [
+    { icon: "analcum", group: "anal", words: ["anal creampie", "anal cum", "cum on ass", "ass to mouth"] },
+    { icon: "creampie", group: "cum", words: ["vaginal creampie", "creampie", "cream pie"] },
+    { icon: "threed", group: "tech", words: ["3d"] },
+    { icon: "resolution", group: "tech", words: ["4k", "5k", "6k", "7k", "3k", "hd", "full hd"] },
+    { icon: "fps", group: "tech", words: ["fps", "60 fps"] },
+    { icon: "vr", group: "tech", words: ["vr", "virtual reality", "180", "200", "220", "360"] },
     { icon: "tech", group: "tech", words: ["4k", "5k", "6k", "7k", "3k", "hd", "fps", "3d", "vr", "virtual reality", "180", "200", "220", "360"] },
     { icon: "camera", group: "camera", words: ["pov", "close", "front", "sideview", "frontview", "rearview", "low angle", "plow cam", "fisheye", "camera"] },
     { icon: "location", group: "location", words: ["bedroom", "bathroom", "kitchen", "office", "school", "classroom", "beach", "garden", "gym", "car", "pool", "spa", "field", "dungeon", "store", "prison", "home", "outdoors", "outside", "indoors", "stairs", "table", "desk", "couch", "bed", "bath", "shower"] },
@@ -300,8 +306,8 @@
     drawBackground(ctx, theme, accent, tag.name);
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    drawSymbol(ctx, rule.icon, accent, secondary, theme.fg);
-    drawCornerGlyph(ctx, rule.group, accent, theme);
+    drawSymbol(ctx, rule.icon, accent, secondary, theme.fg, tag.name);
+    drawCornerGlyph(ctx, rule, tag.name, accent, theme);
     return canvas.toDataURL("image/png");
   }
 
@@ -365,7 +371,7 @@
     ctx.closePath();
   }
 
-  function drawSymbol(ctx, icon, accent, secondary, fg) {
+  function drawSymbol(ctx, icon, accent, secondary, fg, tagName) {
     ctx.save();
     ctx.translate(256, 264);
     ctx.strokeStyle = fg;
@@ -378,6 +384,8 @@
       penis: drawPenis,
       mouth: drawMouth,
       cum: drawCum,
+      analcum: drawAnalCum,
+      creampie: drawCreampie,
       bondage: drawBondage,
       toy: drawToy,
       feet: drawFeet,
@@ -388,6 +396,10 @@
       role: drawRole,
       camera: drawCamera,
       tech: drawTech,
+      threed: draw3D,
+      resolution: drawResolution,
+      fps: drawFps,
+      vr: drawVr,
       group: drawGroup,
       heart: drawHeart,
       flame: drawFlame,
@@ -395,7 +407,7 @@
       star: drawStar,
       tag: drawTag,
     };
-    (draw[icon] || drawTag)(ctx, accent, secondary, fg);
+    (draw[icon] || drawTag)(ctx, accent, secondary, fg, tagName);
     ctx.restore();
   }
 
@@ -478,6 +490,30 @@
     ctx.fillStyle = secondary;
     circle(ctx, 92, 94, 28);
     circle(ctx, -108, 20, 22);
+  }
+
+  function drawAnalCum(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(COLORS.anal, 0.86);
+    ellipse(ctx, -58, 12, 82, 122);
+    ellipse(ctx, 58, 12, 82, 122);
+    ctx.strokeStyle = fg;
+    ctx.lineWidth = 16;
+    ctx.beginPath();
+    ctx.moveTo(0, -104);
+    ctx.quadraticCurveTo(0, -2, 0, 128);
+    ctx.stroke();
+    ctx.fillStyle = "#f7f0d8";
+    blob(ctx, [[24, -58], [86, -22], [70, 48], [26, 95], [-6, 42], [-28, -24]]);
+    ctx.fillStyle = "#f7f0d8";
+    circle(ctx, 94, 86, 24);
+    circle(ctx, -88, 74, 18);
+  }
+
+  function drawCreampie(ctx, accent, secondary, fg) {
+    drawVulva(ctx, COLORS.sex, secondary, fg);
+    ctx.fillStyle = "#f7f0d8";
+    blob(ctx, [[5, -42], [48, -4], [38, 72], [0, 120], [-34, 72], [-48, -4]]);
+    circle(ctx, 70, 92, 20);
   }
 
   function drawBondage(ctx, accent, secondary, fg) {
@@ -625,6 +661,87 @@
     ctx.stroke();
   }
 
+  function draw3D(ctx, accent, secondary, fg) {
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 18;
+    ctx.fillStyle = withAlpha(accent, 0.28);
+    ctx.beginPath();
+    ctx.moveTo(-88, -70);
+    ctx.lineTo(20, -125);
+    ctx.lineTo(120, -66);
+    ctx.lineTo(10, -8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(-88, -70);
+    ctx.lineTo(-88, 58);
+    ctx.lineTo(10, 128);
+    ctx.lineTo(10, -8);
+    ctx.moveTo(120, -66);
+    ctx.lineTo(120, 60);
+    ctx.lineTo(10, 128);
+    ctx.stroke();
+    ctx.fillStyle = fg;
+    ctx.font = "900 74px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("3D", 0, 10);
+  }
+
+  function drawResolution(ctx, accent, secondary, fg, tagName) {
+    const label = resolutionLabel(tagName);
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 20;
+    roundRect(ctx, -146, -92, 292, 184, 26);
+    ctx.stroke();
+    ctx.fillStyle = fg;
+    ctx.font = label.length > 2 ? "900 78px Arial, sans-serif" : "900 96px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(label, 0, 6);
+  }
+
+  function drawFps(ctx, accent, secondary, fg, tagName) {
+    const match = String(tagName || "").match(/(\d+)\s*fps/i);
+    ctx.fillStyle = withAlpha(accent, 0.84);
+    circle(ctx, 0, 0, 126);
+    ctx.fillStyle = fg;
+    ctx.font = "900 78px Arial, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(match ? match[1] : "FPS", 0, -18);
+    ctx.font = "800 40px Arial, sans-serif";
+    ctx.fillText("FPS", 0, 52);
+  }
+
+  function resolutionLabel(tagName) {
+    const value = String(tagName || "").toUpperCase();
+    const match = value.match(/\b(3K|4K|5K|6K|7K|8K|FULL HD|HD)\b/);
+    return match ? match[1].replace("FULL HD", "FHD") : "HD";
+  }
+
+  function drawVr(ctx, accent, secondary, fg) {
+    ctx.fillStyle = withAlpha(accent, 0.84);
+    roundRect(ctx, -150, -62, 300, 124, 48);
+    ctx.fill();
+    ctx.fillStyle = themeSafe("#0f1418");
+    ellipse(ctx, -64, 0, 44, 32);
+    ellipse(ctx, 64, 0, 44, 32);
+    ctx.strokeStyle = fg;
+    ctx.lineWidth = 14;
+    ctx.beginPath();
+    ctx.moveTo(-150, 0);
+    ctx.quadraticCurveTo(-190, -30, -182, -78);
+    ctx.moveTo(150, 0);
+    ctx.quadraticCurveTo(190, -30, 182, -78);
+    ctx.stroke();
+  }
+
+  function themeSafe(color) {
+    return color;
+  }
+
   function drawGroup(ctx, accent, secondary, fg) {
     ctx.fillStyle = withAlpha(accent, 0.84);
     circle(ctx, -72, -55, 42);
@@ -732,7 +849,7 @@
     ctx.fill();
   }
 
-  function drawCornerGlyph(ctx, group, accent, theme) {
+  function drawCornerGlyph(ctx, rule, tagName, accent, theme) {
     ctx.save();
     ctx.translate(402, 402);
     ctx.fillStyle = withAlpha(accent, 0.22);
@@ -742,7 +859,16 @@
     ctx.font = "700 34px Arial, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    const label = { tech: "4K", camera: "POV", location: "LOC", role: "ID", bondage: "X", sex: "+", body: "B", oral: "O", anal: "A", cum: "*", clothing: "C", relationship: "2+", mood: "♥", action: "!", meta: "#" }[group] || "#";
+    const label =
+      rule.icon === "threed"
+        ? "3D"
+        : rule.icon === "vr"
+          ? "VR"
+          : rule.icon === "fps"
+            ? "60"
+            : rule.icon === "resolution"
+              ? resolutionLabel(tagName)
+              : { tech: "T", camera: "POV", location: "LOC", role: "ID", bondage: "X", sex: "+", body: "B", oral: "O", anal: "A", cum: "*", clothing: "C", relationship: "2+", mood: "♥", action: "!", meta: "#" }[rule.group] || "#";
     ctx.fillText(label, 0, 2);
     ctx.restore();
   }

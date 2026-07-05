@@ -27,3 +27,13 @@
   metadata:
     description: Shows active Stash playback from browser sessions and server-side scene activity.
     url: https://github.com/SJoWie80/Stash-Plugins
+
+- id: x-wall
+  name: X Wall
+  version: 0.1.0
+  date: 2026-07-05 00:00:00
+  path: packages/x-wall-v0.1.0.zip
+  sha256: 31373f7e0b5efac19a5ad673cde58162e9dd523f6377733788527ab75ac0924f
+  metadata:
+    description: Shows X profile timelines for favorite performers with Twitter/X URLs.
+    url: https://github.com/SJoWie80/Stash-Plugins

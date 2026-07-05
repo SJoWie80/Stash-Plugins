@@ -1,0 +1,39 @@
+- id: chaturbate
+  name: Chaturbate
+  version: 1.3.8
+  date: 2026-07-01 17:00:00
+  path: packages/chaturbate-v1.3.8.zip
+  sha256: d561be4f30e043de2358b2e3692eb4cc3695a031f9496cbf53a4c5c2d283697d
+  metadata:
+    description: Browse and watch Chaturbate cams inside Stash.
+    url: https://github.com/SJoWie80/Stash-Plugins
+
+- id: folder-view
+  name: Folder View
+  version: 1.2.2
+  date: 2026-07-01 17:00:00
+  path: packages/folder-view-v1.2.2.zip
+  sha256: c52f9476ed70ec2dc9933cd3565b13b1d631fa0cbb2266f5e7aa1a046ad9eaea
+  metadata:
+    description: Browse scenes, galleries, and images through a Stash library folder tree.
+    url: https://github.com/SJoWie80/Stash-Plugins
+
+- id: now-playing
+  name: Now Playing
+  version: 1.2.2
+  date: 2026-07-01 17:00:00
+  path: packages/now-playing-v1.2.2.zip
+  sha256: bc25b90b4e21d16e7adbc96d1797428080128fb5a9e9acb7c8f18816884d4db8
+  metadata:
+    description: Shows active Stash playback from browser sessions and server-side scene activity.
+    url: https://github.com/SJoWie80/Stash-Plugins
+
+- id: x-wall
+  name: X Wall
+  version: 0.1.3
+  date: 2026-07-05 11:58:00
+  path: packages/x-wall-v0.1.3.zip
+  sha256: b99b599cbbebac75fcd5fed7a386da3485d1709b4276b96ec214b84811378d85
+  metadata:
+    description: Shows X profile timelines for favorite performers with Twitter/X URLs.
+    url: https://github.com/SJoWie80/Stash-Plugins

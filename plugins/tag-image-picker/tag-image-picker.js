@@ -22,6 +22,7 @@
     status: "",
     search: "",
     onlyMissing: false,
+    minUsage: 1,
     tagPage: 1,
     style: "neon",
     externalImage: "",
@@ -38,6 +39,7 @@
     previewKey: "",
     previewLoading: false,
     tagScrollTop: 0,
+    bulkRunning: false,
     doneTagIds: loadDoneTagIds(),
     imagePresence: {},
     imageFingerprints: {},
@@ -507,6 +509,7 @@
         const known = hasKnownImage(tag);
         return known !== true;
       })
+      .filter((tag) => tagUsage(tag) >= Number(state.minUsage || 0))
       .filter((tag) => !term || normalize(tag.name).includes(term))
       .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
   }
@@ -1563,6 +1566,74 @@
     }
   }
 
+  async function bestImageForTag(tag) {
+    const cached = state.sourceCache[tag.id];
+    const cachedImage = cached && cached.results && cached.results[0] && cached.results[0].imageData;
+    if (cachedImage) return composeExternalIcon(tag, cachedImage, state.style);
+    try {
+      const result = await pluginOperation({
+        action: "iconify-icon",
+        query: tag.name,
+      });
+      const first = result && result.results && result.results[0];
+      if (first && first.imageData) {
+        state.sourceCache[tag.id] = {
+          results: result.results,
+          selected: 0,
+          imageData: first.imageData,
+          name: first.name ? `Iconify: ${first.name}` : "Iconify icon",
+          query: tag.name,
+        };
+        return composeExternalIcon(tag, first.imageData, state.style);
+      }
+    } catch (error) {
+      // Fall through to local styled icon when Iconify has no useful match.
+    }
+    return drawIcon(tag, state.style);
+  }
+
+  async function bulkApplyVisible() {
+    if (state.bulkRunning || state.saving) return;
+    if (state.onlyMissing && !state.missingScanComplete) {
+      await scanMissingImages();
+    }
+    const tags = filteredTags();
+    const start = (state.tagPage - 1) * TAGS_PER_PAGE;
+    const pageTags = tags.slice(start, start + TAGS_PER_PAGE).filter((tag) => !hasKnownImage(tag));
+    if (!pageTags.length) {
+      state.status = "No visible missing tags to apply";
+      render();
+      return;
+    }
+    state.bulkRunning = true;
+    state.saving = true;
+    state.error = "";
+    captureTagScroll();
+    render();
+    let saved = 0;
+    try {
+      for (const tag of pageTags) {
+        state.status = `Applying icons ${saved + 1}/${pageTags.length}: ${tag.name}`;
+        render();
+        const image = await bestImageForTag(tag);
+        const updated = await updateTagImage(tag.id, image);
+        tag.image_path = (updated && updated.image_path) || image;
+        markTagDone(tag.id);
+        saved += 1;
+      }
+      ensureSelectedVisible();
+      state.status = `Applied ${saved} icons on this page`;
+    } catch (error) {
+      state.error = error.message || String(error);
+      state.status = saved ? `Stopped after ${saved} icons` : "";
+      console.error("[Tag Icon Studio] bulk save failed", error);
+    } finally {
+      state.bulkRunning = false;
+      state.saving = false;
+      render();
+    }
+  }
+
   async function updateTagImage(id, image) {
     try {
       const data = await graphql(
@@ -1630,10 +1701,47 @@
     });
     missing.append(missingInput, el("span", "", "Missing only"));
 
+    const minUsage = el("select", "stash-tip-select");
+    [
+      [0, "All uses"],
+      [1, "1+ use"],
+      [2, "2+ uses"],
+      [5, "5+ uses"],
+      [10, "10+ uses"],
+      [25, "25+ uses"],
+      [50, "50+ uses"],
+    ].forEach(([value, label]) => {
+      const option = el("option", "", label);
+      option.value = String(value);
+      option.selected = Number(state.minUsage) === value;
+      minUsage.appendChild(option);
+    });
+    minUsage.addEventListener("change", () => {
+      captureTagScroll();
+      state.minUsage = Number(minUsage.value || 0);
+      state.tagPage = 1;
+      state.tagScrollTop = 0;
+      const visible = filteredTags();
+      if (!visible.some((tag) => tag.id === state.selectedTagId)) {
+        selectTag(visible[0] ? visible[0].id : "");
+        return;
+      }
+      render();
+    });
+
+    const visibleTags = filteredTags();
+    const visibleStart = (state.tagPage - 1) * TAGS_PER_PAGE;
+    const visiblePage = visibleTags.slice(visibleStart, visibleStart + TAGS_PER_PAGE);
+    const bulkCount = visiblePage.filter((tag) => !hasKnownImage(tag)).length;
+    const bulk = el("button", "stash-tip-button save", state.bulkRunning ? "Applying..." : `Apply visible (${bulkCount})`);
+    bulk.type = "button";
+    bulk.disabled = state.bulkRunning || state.saving || !bulkCount;
+    bulk.addEventListener("click", bulkApplyVisible);
+
     const refresh = el("button", "stash-tip-button", "Refresh");
     refresh.type = "button";
     refresh.addEventListener("click", () => loadTags(true));
-    toolbar.append(search, missing, refresh);
+    toolbar.append(search, missing, minUsage, bulk, refresh);
     parent.appendChild(toolbar);
   }
 

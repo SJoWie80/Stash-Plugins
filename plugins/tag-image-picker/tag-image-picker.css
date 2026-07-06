@@ -8,7 +8,7 @@
 .stash-tip-titlebar { align-items: flex-end; display: flex; gap: 1rem; justify-content: space-between; margin-bottom: 1rem; }
 .stash-tip-titlebar h1 { font-size: 1.6rem; margin: 0; }
 .stash-tip-titlebar p, .stash-tip-subtle { color: #aeb6c2; margin: 0; }
-.stash-tip-toolbar { align-items: center; display: grid; gap: .75rem; grid-template-columns: minmax(14rem, 1fr) auto auto; margin-bottom: 1rem; }
+.stash-tip-toolbar { align-items: center; display: grid; gap: .75rem; grid-template-columns: minmax(14rem, 1fr) repeat(4, auto); margin-bottom: 1rem; }
 .stash-tip-search, .stash-tip-select { background: #17191d; border: 1px solid rgba(255,255,255,.16); border-radius: 6px; color: inherit; min-height: 2.25rem; padding: .35rem .7rem; }
 .stash-tip-search { width: 100%; }
 .stash-tip-check { align-items: center; display: inline-flex; gap: .4rem; white-space: nowrap; }

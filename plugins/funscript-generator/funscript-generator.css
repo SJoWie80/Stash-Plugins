@@ -1,0 +1,187 @@
+.stash-fg-nav-wrap {
+  display: inline-flex;
+}
+
+.stash-fg-nav-button {
+  align-items: center;
+  color: inherit;
+  display: inline-flex;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.stash-fg-nav-button:hover,
+.stash-fg-nav-button:focus,
+.stash-fg-nav-button.active {
+  color: #fff;
+  text-decoration: none;
+}
+
+.stash-fg-nav-icon {
+  color: #f2c94c;
+  font-size: 0.95rem;
+}
+
+.stash-fg-launcher {
+  background: #516171;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  bottom: 1rem;
+  color: #fff;
+  min-height: 2.4rem;
+  padding: 0.45rem 0.8rem;
+  position: fixed;
+  right: 1rem;
+  z-index: 9999;
+}
+
+.stash-fg-shell {
+  color: var(--body-color, #f3f4f6);
+  margin: 0 auto;
+  max-width: 1500px;
+  padding: 1.25rem;
+}
+
+.stash-fg-titlebar {
+  margin-bottom: 1rem;
+}
+
+.stash-fg-titlebar h1 {
+  font-size: 1.6rem;
+  margin: 0;
+}
+
+.stash-fg-titlebar p {
+  color: #aeb6c2;
+  margin: 0.25rem 0 0;
+}
+
+.stash-fg-layout {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(18rem, 24rem) minmax(0, 1fr);
+}
+
+.stash-fg-panel,
+.stash-fg-main,
+.stash-fg-status,
+.stash-fg-error,
+.stash-fg-summary,
+.stash-fg-job,
+.stash-fg-scene {
+  background: #181b20;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+}
+
+.stash-fg-panel,
+.stash-fg-main {
+  padding: 1rem;
+}
+
+.stash-fg-field,
+.stash-fg-check {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 0.8rem;
+}
+
+.stash-fg-check {
+  grid-template-columns: 1.1rem minmax(0, 1fr);
+}
+
+.stash-fg-field input,
+.stash-fg-field textarea,
+.stash-fg-toolbar select {
+  background: #101214;
+  border: 1px solid #3a424d;
+  border-radius: 6px;
+  color: inherit;
+  padding: 0.55rem 0.65rem;
+  width: 100%;
+}
+
+.stash-fg-field textarea {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 0.8rem;
+}
+
+.stash-fg-toolbar,
+.stash-fg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.stash-fg-toolbar select {
+  max-width: 26rem;
+}
+
+.stash-fg-scenes,
+.stash-fg-main {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.stash-fg-scene {
+  align-items: start;
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: 1.2rem minmax(0, 1fr);
+  padding: 0.7rem;
+}
+
+.stash-fg-scene code,
+.stash-fg-job code {
+  color: #b8c0cc;
+  overflow-wrap: anywhere;
+}
+
+.stash-fg-summary,
+.stash-fg-status,
+.stash-fg-error,
+.stash-fg-job {
+  display: grid;
+  gap: 0.4rem;
+  padding: 0.75rem;
+}
+
+.stash-fg-error {
+  color: #ffb3b3;
+}
+
+.stash-fg-pill {
+  background: #2b3340;
+  border-radius: 999px;
+  color: #dce7f7;
+  display: inline-flex;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.45rem;
+  width: fit-content;
+}
+
+.stash-fg-job.done .stash-fg-pill {
+  background: #17412d;
+  color: #bdf7d7;
+}
+
+.stash-fg-job.failed .stash-fg-pill {
+  background: #51262b;
+  color: #ffc9cf;
+}
+
+.stash-fg-log {
+  background: #0d0f12;
+  border-radius: 8px;
+  color: #d8dee9;
+  max-height: 18rem;
+  overflow: auto;
+  padding: 0.8rem;
+}
+
+@media (max-width: 980px) {
+  .stash-fg-layout {
+    grid-template-columns: 1fr;
+  }
+}

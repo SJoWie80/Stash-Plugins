@@ -37,3 +37,13 @@
   metadata:
     description: Generate or import consistent icon artwork and assign it to Stash tags.
     url: https://github.com/SJoWie80/Stash-Plugins
+
+- id: funscript-generator
+  name: Funscript Generator
+  version: 0.1.0
+  date: 2026-07-07 13:10:00
+  path: packages/funscript-generator-v0.1.0.zip
+  sha256: e3f5f65c9f045b1d079b5895ab8bce23b16b4ea7b3bef9fb2b297cace9487148
+  metadata:
+    description: Queue selected Stash scenes for local funscript generation.
+    url: https://github.com/SJoWie80/Stash-Plugins

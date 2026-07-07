@@ -23,6 +23,7 @@ Then open `Settings > Plugins`, reload plugin sources, and install the plugins y
 - `Folder View` - browse scenes and galleries grouped by filesystem folder.
 - `Now Playing` - show active Stash web playback sessions reported by connected browsers.
 - `Tag Icon Studio` - generate or import consistent icon artwork and assign it to Stash tags.
+- `Funscript Scraper` - search configured funscript sources, place matching `.funscript` files beside videos, and tag scenes.
 
 ## Included Bridges
 

@@ -37,6 +37,7 @@ services:
       FUNSCRIPT_PORT: "8891"
       MEDIA_ROOTS: "/videos"
       OUTPUT_DIR: ""
+      ANALYSIS_WIDTH: "360"
     volumes:
       - "D:/Stash/Videos:/videos"
 ```
@@ -77,6 +78,7 @@ services:
       FUNSCRIPT_PORT: '8891'
       MEDIA_ROOTS: /videos
       OUTPUT_DIR: ''
+      ANALYSIS_WIDTH: '360'
     ports:
       - '8891:8891'
     restart: unless-stopped
@@ -92,12 +94,13 @@ services:
 | `FUNSCRIPT_PORT` | `8891` | Web app port inside the container. |
 | `MEDIA_ROOTS` | `/videos` | Mounted folders the UI may browse. Use `:` between multiple roots in Linux containers, for example `/videos:/downloads`. |
 | `OUTPUT_DIR` | empty | Optional output folder. If empty, scripts are written next to each video. |
+| `ANALYSIS_WIDTH` | `360` | Width used for internal frame analysis. Lower is faster; higher may keep more detail. Use `0` to disable resizing. |
 
 ## Generator Settings
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| Sample rate | `6` | Frames per second to inspect. Higher is slower but can catch faster motion. |
+| Sample rate | `3` | Frames per second to inspect. Higher is slower but can catch faster motion. |
 | Sensitivity | `1.15` | Higher values ignore more low-level motion. Lower values create more actions. |
 | Minimum action gap | `90 ms` | Prevents overly dense scripts. Lower values are more detailed. |
 | Overwrite | off | Existing `.funscript` files are skipped by default. |

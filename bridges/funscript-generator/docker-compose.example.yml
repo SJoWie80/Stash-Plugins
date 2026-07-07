@@ -10,5 +10,6 @@ services:
       FUNSCRIPT_PORT: "8891"
       MEDIA_ROOTS: "/videos"
       OUTPUT_DIR: ""
+      ANALYSIS_WIDTH: "360"
     volumes:
       - "D:/Stash/Videos:/videos"

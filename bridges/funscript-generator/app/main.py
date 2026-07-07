@@ -21,6 +21,7 @@ HOST = os.environ.get("FUNSCRIPT_HOST", "0.0.0.0")
 PORT = int(os.environ.get("FUNSCRIPT_PORT", "8891"))
 MEDIA_ROOTS = [Path(value).resolve() for value in os.environ.get("MEDIA_ROOTS", "/videos").split(os.pathsep) if value.strip()]
 OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "").strip()
+ANALYSIS_WIDTH = int(os.environ.get("ANALYSIS_WIDTH", "360"))
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".m4v", ".webm", ".wmv"}
 
 
@@ -31,7 +32,7 @@ job_queue: "queue.Queue[str]" = queue.Queue()
 
 class GenerateRequest(BaseModel):
     files: list[str]
-    sample_fps: float = 6.0
+    sample_fps: float = 3.0
     sensitivity: float = 1.15
     min_gap_ms: int = 90
     output_mode: str = "next_to_video"
@@ -205,17 +206,28 @@ def generate_funscript(
             progress_callback(max(0.0, min(1.0, progress)), message)
 
     while True:
-        ok, frame = capture.read()
+        ok = capture.grab()
         if not ok:
             break
         if frame_index % step != 0:
             frame_index += 1
+            now = time.time()
+            if frame_count and now - last_progress_at >= 1.0:
+                report(frame_index / frame_count, f"Skipping frames {min(frame_index, frame_count):,}/{frame_count:,}")
+                last_progress_at = now
             continue
+
+        ok, frame = capture.retrieve()
+        if not ok:
+            break
 
         height, width = frame.shape[:2]
         x1, x2 = int(width * 0.18), int(width * 0.82)
         y1, y2 = int(height * 0.10), int(height * 0.92)
         crop = frame[y1:y2, x1:x2]
+        if ANALYSIS_WIDTH > 0 and crop.shape[1] > ANALYSIS_WIDTH:
+            resized_height = max(1, int(crop.shape[0] * (ANALYSIS_WIDTH / crop.shape[1])))
+            crop = cv2.resize(crop, (ANALYSIS_WIDTH, resized_height), interpolation=cv2.INTER_AREA)
         gray = cv2.cvtColor(crop, cv2.COLOR_BGR2GRAY)
         gray = cv2.GaussianBlur(gray, (9, 9), 0)
 
@@ -268,6 +280,7 @@ def generate_funscript(
             "video": video_path.name,
             "duration_ms": duration_ms,
             "sample_fps": sample_fps,
+            "analysis_width": ANALYSIS_WIDTH,
             "algorithm": "opencv-frame-difference-v1",
         },
         "actions": actions,
@@ -347,7 +360,7 @@ def index():
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok", "roots": [str(root) for root in safe_roots()], "output_dir": OUTPUT_DIR}
+    return {"status": "ok", "roots": [str(root) for root in safe_roots()], "output_dir": OUTPUT_DIR, "analysis_width": ANALYSIS_WIDTH}
 
 
 @app.get("/api/browse")
@@ -440,7 +453,7 @@ HTML = r"""<!doctype html>
       </div>
       <div class="settings">
         <label>Sample rate
-          <input id="sampleFps" type="number" min="1" max="24" step="0.5" value="6">
+          <input id="sampleFps" type="number" min="1" max="24" step="0.5" value="3">
         </label>
         <label>Sensitivity
           <input id="sensitivity" type="number" min="0.4" max="3" step="0.05" value="1.15">
@@ -468,22 +481,6 @@ HTML = r"""<!doctype html>
         </div>
       </div>
       <div class="panel">
-        <div class="panel-head">
-          <strong>Folder</strong>
-          <span class="path" id="count"></span>
-        </div>
-        <div id="entries"></div>
-      </div>
-      <div class="actions"></div>
-      <div class="panel">
-        <div class="panel-head">
-          <strong>Selected videos</strong>
-          <span class="path" id="selectedCount">0</span>
-        </div>
-        <div class="selected" id="selected"></div>
-      </div>
-      <div class="actions"></div>
-      <div class="panel">
         <div class="panel-head"><strong>Job</strong><span class="path" id="jobId"></span></div>
         <div class="status">
           <div class="progress-row">
@@ -500,6 +497,22 @@ HTML = r"""<!doctype html>
           </div>
           <div class="results-list" id="results"></div>
         </div>
+      </div>
+      <div class="actions"></div>
+      <div class="panel">
+        <div class="panel-head">
+          <strong>Folder</strong>
+          <span class="path" id="count"></span>
+        </div>
+        <div id="entries"></div>
+      </div>
+      <div class="actions"></div>
+      <div class="panel">
+        <div class="panel-head">
+          <strong>Selected videos</strong>
+          <span class="path" id="selectedCount">0</span>
+        </div>
+        <div class="selected" id="selected"></div>
       </div>
     </section>
   </main>

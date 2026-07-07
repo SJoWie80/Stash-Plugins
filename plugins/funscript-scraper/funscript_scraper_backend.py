@@ -26,6 +26,10 @@ STOP_TOKENS = {
 GENERIC_TITLE_TOKENS = {
     "bath", "time", "tie", "love", "lover", "nurse", "patient", "amateur", "anal", "deeper", "sexy",
     "white", "black", "girl", "girls", "boy", "boys", "big", "small", "hot", "teen", "mom", "step",
+    "besties", "blanket", "blankets", "passion", "dreamy", "morning", "call", "shower", "walk",
+    "park", "price", "tryouts", "contact", "hand", "teasing", "project", "whispers", "resist",
+    "satisfaction", "heat", "delicious", "great", "day", "euphoria", "coming", "treatment",
+    "pleasure", "interviews",
 }
 
 
@@ -134,17 +138,58 @@ def score_candidate(scene, query, candidate):
     return max(0, min(100, int(base)))
 
 
+def title_match_quality(scene, candidate):
+    scene_title_tokens = set(tokens(scene.get("title") or ""))
+    candidate_tokens = set(tokens(candidate.get("title") or candidate.get("text") or ""))
+    if not scene_title_tokens or not candidate_tokens:
+        return {"ok": False, "coverage": 0, "overlap": 0, "generic": True}
+    overlap_tokens = scene_title_tokens & candidate_tokens
+    overlap = len(overlap_tokens)
+    coverage = overlap / max(1, len(scene_title_tokens))
+    generic_overlap = all(token in GENERIC_TITLE_TOKENS for token in overlap_tokens)
+    useful_overlap = len([token for token in overlap_tokens if token not in GENERIC_TITLE_TOKENS])
+    return {
+        "ok": coverage >= 0.85 and (useful_overlap >= 2 or (len(scene_title_tokens) >= 4 and useful_overlap >= 1)),
+        "coverage": coverage,
+        "overlap": overlap,
+        "generic": generic_overlap,
+        "useful": useful_overlap,
+    }
+
+
+def has_metadata_evidence(scene, candidate):
+    text = candidate.get("text") or candidate.get("title") or ""
+    if duration_score(scene, candidate) > 0:
+        return True
+    if metadata_bonus(scene, text) >= 12:
+        return True
+    return False
+
+
+def acceptable_candidate(scene, candidate):
+    title_quality = title_match_quality(scene, candidate)
+    scene_title_tokens = set(tokens(scene.get("title") or ""))
+    candidate_title_tokens = set(tokens(os.path.splitext(candidate.get("title") or "")[0]))
+    if len(scene_title_tokens) <= 3:
+        if scene_title_tokens == candidate_title_tokens:
+            return True
+        return has_metadata_evidence(scene, candidate) and title_quality["coverage"] >= 0.85
+    if title_quality["ok"]:
+        return True
+    if title_quality["coverage"] >= 0.7 and title_quality["useful"] >= 1 and has_metadata_evidence(scene, candidate):
+        return True
+    return False
+
+
 def scene_queries(scene):
     path = scene.get("path") or ""
     base = os.path.splitext(os.path.basename(path))[0]
-    values = [
-        base,
-        scene.get("title") or "",
-        "{} {}".format(scene.get("studio") or "", scene.get("title") or "").strip(),
-    ]
+    title = scene.get("title") or ""
+    values = [title]
     for performer in scene.get("performers") or []:
         values.append("{} {}".format(performer, scene.get("title") or "").strip())
-        values.append("{} {}".format(performer, base).strip())
+    if not title:
+        values.append(base)
     unique = []
     seen = set()
     for value in values:
@@ -468,6 +513,8 @@ def find_github(scene, provider, min_score):
             candidate_indexes.update(token_index.get(token, []))
     for index in candidate_indexes:
         candidate = candidate_data["candidates"][index]
+        if not acceptable_candidate(scene, candidate):
+            continue
         score = max(score_candidate(scene, query, candidate) for query in queries)
         if score >= min_score and (not best or score > best["score"]):
             best = dict(candidate)

@@ -1,3 +1,28 @@
+.stash-fs-nav-wrap {
+  display: inline-flex;
+}
+
+.stash-fs-nav-button {
+  align-items: center;
+  color: inherit;
+  display: inline-flex;
+  gap: 0.4rem;
+  white-space: nowrap;
+}
+
+.stash-fs-nav-button:hover,
+.stash-fs-nav-button:focus,
+.stash-fs-nav-button.active {
+  color: #fff;
+  text-decoration: none;
+}
+
+.stash-fs-nav-icon {
+  color: #72d6ff;
+  font-size: 0.95rem;
+  opacity: 0.95;
+}
+
 .stash-fs-app {
   min-height: 100vh;
   padding: 24px;

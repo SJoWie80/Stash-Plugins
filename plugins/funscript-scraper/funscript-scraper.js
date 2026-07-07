@@ -8,6 +8,7 @@
   const SETTINGS_KEY = "stash-funscript-scraper-settings-v1";
   const PAGE_SIZE = 40;
   const MAX_PAGES = 500;
+  const SCRAPE_CHUNK_SIZE = 100;
 
   const state = {
     pluginId: "",
@@ -22,6 +23,8 @@
     sampleErrors: [],
     processedCount: 0,
     matchedCount: 0,
+    stopRequested: false,
+    abortController: null,
     settings: loadSettings(),
     routeRegistered: false,
     routeContainer: null,
@@ -201,13 +204,15 @@
     return app;
   }
 
-  async function graphql(query, variables) {
-    const response = await fetch("/graphql", {
+  async function graphql(query, variables, signal) {
+    const options = {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ query, variables }),
-    });
+    };
+    if (signal) options.signal = signal;
+    const response = await fetch("/graphql", options);
     const payload = await response.json();
     if (payload.errors && payload.errors.length) {
       throw new Error(payload.errors.map((error) => error.message).join("; "));
@@ -224,11 +229,12 @@
     return state.pluginId;
   }
 
-  async function pluginOperation(args) {
+  async function pluginOperation(args, signal) {
     const pluginId = await getPluginId();
     const data = await graphql(
       "mutation FunscriptScraperOperation($pluginId: ID!, $args: Map) { runPluginOperation(plugin_id: $pluginId, args: $args) }",
-      { pluginId, args }
+      { pluginId, args },
+      signal
     );
     const result = data && data.runPluginOperation;
     const output = result && (result.output || result.result || result);
@@ -353,30 +359,38 @@
     state.sampleErrors = [];
     state.processedCount = 0;
     state.matchedCount = 0;
+    state.stopRequested = false;
+    state.abortController = new AbortController();
     render();
     try {
       const settings = parsedSettings();
       if (!state.scenes.length) await loadScenes();
       const tagId = settings.dryRun ? "" : await ensureTag(settings.tagName || "Funscript");
       const scenes = state.scenes.map(scenePayload);
-      state.status = `GitHub bronnen indexeren en ${scenes.length} scenes matchen...`;
-      render();
-      const output = await pluginOperation({ action: "batch-search-download", scenes, settings });
-      state.providerStats = output.providerStats || [];
-      state.errorCount = output.errorCount || 0;
-      state.sampleErrors = output.errors || [];
-      state.processedCount = output.processed || scenes.length;
-      state.matchedCount = output.matched || 0;
-      const byId = {};
-      state.scenes.forEach((scene) => {
-        byId[scene.id] = scene;
-      });
-      state.results = (output.results || []).map((item) => ({
-        scene: byId[item.sceneId] || item.scene || {},
-        result: item.result || {},
-      }));
+      const byId = Object.fromEntries(state.scenes.map((scene) => [scene.id, scene]));
+      for (let offset = 0; offset < scenes.length; offset += SCRAPE_CHUNK_SIZE) {
+        if (state.stopRequested) break;
+        const chunk = scenes.slice(offset, offset + SCRAPE_CHUNK_SIZE);
+        state.status = `Scraped ${state.processedCount}/${scenes.length} - hits ${state.matchedCount}`;
+        render();
+        const output = await pluginOperation(
+          { action: "batch-search-download", scenes: chunk, settings },
+          state.abortController && state.abortController.signal
+        );
+        if ((output.providerStats || []).length) state.providerStats = output.providerStats;
+        state.errorCount += output.errorCount || 0;
+        state.sampleErrors = state.sampleErrors.concat(output.errors || []).slice(0, 50);
+        state.processedCount += output.processed || chunk.length;
+        state.matchedCount += output.matched || 0;
+        const chunkResults = (output.results || []).map((item) => ({
+          scene: byId[item.sceneId] || item.scene || {},
+          result: item.result || {},
+        }));
+        state.results = chunkResults.concat(state.results);
+      }
       if (tagId) {
         for (const item of state.results) {
+          if (state.stopRequested) break;
           const placed = item.result && item.result.placement && item.result.placement.placed;
           if (placed && item.scene && item.scene.id) {
             await addTagToScene(item.scene, tagId);
@@ -384,14 +398,34 @@
           }
         }
       }
-      state.status = `Klaar: scraped ${state.processedCount}/${state.scenes.length} - hits ${state.matchedCount}`;
+      state.status = state.stopRequested
+        ? `Gestopt: scraped ${state.processedCount}/${state.scenes.length} - hits ${state.matchedCount}`
+        : `Klaar: scraped ${state.processedCount}/${state.scenes.length} - hits ${state.matchedCount}`;
     } catch (error) {
-      state.error = error.message || String(error);
-      state.status = "";
+      state.error = state.stopRequested ? "" : (error.message || String(error));
+      state.status = state.stopRequested
+        ? `Gestopt: scraped ${state.processedCount}/${state.scenes.length} - hits ${state.matchedCount}`
+        : "";
     } finally {
+      state.abortController = null;
+      state.stopRequested = false;
       state.running = false;
       render();
     }
+  }
+
+  function stopBatch() {
+    if (!state.running) return;
+    state.stopRequested = true;
+    state.status = `Stoppen... scraped ${state.processedCount}/${state.scenes.length}`;
+    if (state.abortController) {
+      try {
+        state.abortController.abort();
+      } catch (error) {
+        console.warn("[Funscript Scraper] abort failed", error);
+      }
+    }
+    render();
   }
 
   function field(label, child) {
@@ -595,6 +629,12 @@
     run.addEventListener("click", runBatch);
     actions.appendChild(load);
     actions.appendChild(run);
+    if (state.running) {
+      const stop = el("button", "btn btn-danger", "Stop scrape");
+      stop.type = "button";
+      stop.addEventListener("click", stopBatch);
+      actions.appendChild(stop);
+    }
     panel.appendChild(actions);
 
     const main = el("div", "stash-fs-main");
@@ -630,17 +670,13 @@
     addNav();
     if (state.routeContainer) {
       renderContent(state.routeContainer);
-      return;
+    } else if (!state.routeRegistered) {
+      const app = getApp();
+      app.hidden = !isRoute();
+      if (!app.hidden) renderContent(app);
     }
-    if (state.routeRegistered) {
-      const fallback = document.body.querySelector(`main#${APP_ID}`);
-      if (fallback) fallback.remove();
-      return;
-    }
-    const app = getApp();
-    app.hidden = !isRoute();
-    if (app.hidden) return;
-    renderContent(app);
+    const navButton = document.querySelector(`#${NAV_ID} .stash-fs-nav-button`);
+    if (navButton) navButton.classList.toggle("active", isRoute());
   }
 
   function registerPluginRoute() {
@@ -654,7 +690,7 @@
       React.useEffect(() => {
         if (!ref.current) return undefined;
         const fallback = document.body.querySelector(`main#${APP_ID}`);
-        if (fallback) fallback.remove();
+        if (fallback && fallback !== ref.current) fallback.remove();
         state.routeContainer = ref.current;
         ref.current.className = "stash-fs-app";
         renderContent(ref.current);

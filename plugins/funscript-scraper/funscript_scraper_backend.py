@@ -13,6 +13,12 @@ import urllib.request
 
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".m4v", ".webm"}
 DEFAULT_USER_AGENT = "Mozilla/5.0 Stash Funscript Scraper"
+STOP_TOKENS = {
+    "1080", "1080p", "2160", "2160p", "720", "720p", "480", "480p", "4k", "5k", "6k", "8k",
+    "uhd", "hd", "fhd", "web", "webdl", "webrip", "x264", "x265", "h264", "h265", "hevc",
+    "mp4", "mkv", "avi", "wmv", "mov", "vr", "180", "360", "60fps", "fps", "com", "www",
+    "scene", "scenes", "video", "videos", "part", "pt",
+}
 
 
 def read_input():
@@ -42,17 +48,31 @@ def normalize(value):
 
 
 def tokens(value):
-    return [part for part in normalize(value).split(" ") if len(part) >= 2]
+    result = []
+    for part in normalize(value).split(" "):
+        if len(part) < 2 or part in STOP_TOKENS:
+            continue
+        if part.isdigit() and len(part) > 2:
+            continue
+        result.append(part)
+    return result
 
 
 def score_text(needle, haystack):
     needle_tokens = tokens(needle)
-    haystack_norm = normalize(haystack)
-    if not needle_tokens or not haystack_norm:
+    haystack_tokens = tokens(haystack)
+    haystack_norm = " ".join(haystack_tokens)
+    needle_norm = " ".join(needle_tokens)
+    if not needle_tokens or not haystack_tokens:
         return 0
-    hits = sum(1 for token in needle_tokens if token in haystack_norm)
-    score = int(100 * hits / max(1, len(needle_tokens)))
-    if normalize(needle) and normalize(needle) in haystack_norm:
+    needle_set = set(needle_tokens)
+    haystack_set = set(haystack_tokens)
+    hits = len(needle_set & haystack_set)
+    query_coverage = hits / max(1, len(needle_set))
+    candidate_coverage = hits / max(1, len(haystack_set))
+    short_coverage = hits / max(1, min(len(needle_set), len(haystack_set)))
+    score = int(100 * max(query_coverage, candidate_coverage, short_coverage * 0.92))
+    if needle_norm and needle_norm in haystack_norm:
         score = max(score, 95)
     return score
 
@@ -359,6 +379,13 @@ def prepare_github_providers(settings):
     return stats
 
 
+def enabled_source_count(settings):
+    count = len([root for root in (settings.get("localFolders") or []) if str(root or "").strip()])
+    if settings.get("enableOnline"):
+        count += len([provider for provider in (settings.get("providers") or []) if provider and provider.get("enabled") is not False])
+    return count
+
+
 def download_candidate(candidate):
     fd, temp_path = tempfile.mkstemp(prefix="stash-funscript-", suffix=".funscript")
     os.close(fd)
@@ -445,6 +472,21 @@ def batch_search_download(args):
     provider_stats = []
     processed = 0
     matched = 0
+
+    source_count = enabled_source_count(settings)
+    if source_count == 0:
+        return {
+            "output": {
+                "ok": False,
+                "processed": 0,
+                "matched": 0,
+                "results": [],
+                "errors": [{"error": "Geen actieve bronnen. Zet minstens een lokale map of GitHub bron aan."}],
+                "errorCount": 1,
+                "providerStats": [{"source": "Sources", "ok": False, "error": "Geen actieve bronnen"}],
+                "timestamp": int(time.time()),
+            }
+        }
 
     if settings.get("enableOnline"):
         provider_stats = prepare_github_providers(settings)

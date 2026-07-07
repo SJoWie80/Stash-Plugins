@@ -67,7 +67,7 @@
       overwrite: false,
       enableOnline: false,
       tagName: "Funscript",
-      minScore: 72,
+      minScore: 65,
       localFoldersText: "",
       providers: defaultProviders,
       maxScenes: 10,
@@ -496,6 +496,19 @@
     render();
   }
 
+  function enableBuiltInProviders() {
+    const providers = Array.isArray(state.settings.providers) ? state.settings.providers.slice() : [];
+    providers.forEach((provider) => {
+      if ((provider.repo || "").match(/^(xqueezeme\/xtoys-scripts|FredTungsten\/Scripts)$/i)) {
+        provider.enabled = true;
+      }
+    });
+    state.settings.enableOnline = true;
+    state.settings.providers = providers;
+    saveSettings();
+    render();
+  }
+
   function removeProvider(index) {
     const providers = Array.isArray(state.settings.providers) ? state.settings.providers.slice() : [];
     providers.splice(index, 1);
@@ -517,9 +530,13 @@
     const wrap = el("div", "stash-fs-providers");
     const title = el("div", "stash-fs-subhead");
     title.appendChild(el("strong", "", "GitHub bronnen"));
+    const enableBuiltIns = el("button", "btn btn-secondary", "Zet standaardbronnen aan");
+    enableBuiltIns.type = "button";
+    enableBuiltIns.addEventListener("click", enableBuiltInProviders);
     const add = el("button", "btn btn-secondary", "Bron toevoegen");
     add.type = "button";
     add.addEventListener("click", addGithubProvider);
+    title.appendChild(enableBuiltIns);
     title.appendChild(add);
     wrap.appendChild(title);
 

@@ -1,6 +1,6 @@
 name: Funscript Scraper
 description: Search, download, place, and tag funscripts for Stash scenes.
-version: 0.1.6
+version: 0.1.7
 url: https://github.com/SJoWie80/Stash-Plugins
 exec:
   - python

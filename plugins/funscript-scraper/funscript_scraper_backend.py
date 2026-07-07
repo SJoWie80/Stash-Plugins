@@ -1,4 +1,5 @@
 import html
+import io
 import json
 import os
 import re
@@ -9,10 +10,13 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import zipfile
 
 
 VIDEO_EXTENSIONS = {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".m4v", ".webm"}
 DEFAULT_USER_AGENT = "Mozilla/5.0 Stash Funscript Scraper"
+CACHE_FILE = os.path.join(tempfile.gettempdir(), "stash_funscript_scraper_cache.json")
+CACHE_TTL_SECONDS = 24 * 60 * 60
 STOP_TOKENS = {
     "1080", "1080p", "2160", "2160p", "720", "720p", "480", "480p", "4k", "5k", "6k", "8k",
     "uhd", "hd", "fhd", "web", "webdl", "webrip", "x264", "x265", "h264", "h265", "hevc",
@@ -180,6 +184,25 @@ def request_url(url, headers=None, binary=False):
     return raw if binary else raw.decode("utf-8", errors="replace")
 
 
+def load_cache():
+    try:
+        with open(CACHE_FILE, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_cache(cache):
+    try:
+        tmp = CACHE_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as handle:
+            json.dump(cache, handle, ensure_ascii=False)
+        os.replace(tmp, CACHE_FILE)
+    except Exception:
+        pass
+
+
 def absolutize(base_url, url):
     return urllib.parse.urljoin(base_url, html.unescape(url or ""))
 
@@ -258,10 +281,33 @@ def github_tree(repo, branch, headers):
         urllib.parse.quote(repo, safe="/"),
         urllib.parse.quote(branch or "main", safe=""),
     )
-    data = json.loads(request_url(api_url, headers=headers))
-    if data.get("truncated"):
-        raise ValueError("GitHub tree is truncated for {}".format(repo))
-    return data.get("tree") or []
+    try:
+        data = json.loads(request_url(api_url, headers=headers))
+        if data.get("truncated"):
+            raise ValueError("GitHub tree is truncated for {}".format(repo))
+        return data.get("tree") or []
+    except urllib.error.HTTPError as exc:
+        if exc.code not in (403, 429):
+            raise
+        return github_tree_from_zip(repo, branch, headers)
+
+
+def github_tree_from_zip(repo, branch, headers):
+    zip_url = "https://codeload.github.com/{}/zip/refs/heads/{}".format(
+        urllib.parse.quote(repo, safe="/"),
+        urllib.parse.quote(branch or "main", safe=""),
+    )
+    raw = request_url(zip_url, headers=headers, binary=True)
+    tree = []
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        for name in archive.namelist():
+            if name.endswith("/"):
+                continue
+            parts = name.split("/", 1)
+            if len(parts) != 2:
+                continue
+            tree.append({"type": "blob", "path": parts[1]})
+    return tree
 
 
 def cached_github_tree(provider, branch):
@@ -269,11 +315,22 @@ def cached_github_tree(provider, branch):
     repo = str(provider.get("repo") or "").strip().strip("/")
     key = "{}@{}".format(repo, branch)
     if key not in cache:
-        cache[key] = github_tree(repo, branch, provider.get("headers") or {})
+        disk_cache = load_cache()
+        disk_item = disk_cache.get(key)
+        now = time.time()
+        if disk_item and now - float(disk_item.get("createdAt") or 0) < CACHE_TTL_SECONDS:
+            cache[key] = disk_item.get("tree") or []
+        else:
+            tree = github_tree(repo, branch, provider.get("headers") or {})
+            cache[key] = tree
+            disk_cache[key] = {"createdAt": now, "tree": tree}
+            save_cache(disk_cache)
     return cache[key]
 
 
 def find_github(scene, provider, min_score):
+    if provider.get("_disabledError"):
+        return None
     repo = str(provider.get("repo") or "").strip().strip("/")
     if not repo or "/" not in repo:
         return None
@@ -347,6 +404,7 @@ def prepare_github_providers(settings):
             continue
         repo = str(provider.get("repo") or "").strip().strip("/")
         if not repo or "/" not in repo:
+            provider["_disabledError"] = "missing repo"
             stats.append({"source": provider.get("name") or "GitHub", "ok": False, "error": "missing repo"})
             continue
         branches = []
@@ -370,6 +428,7 @@ def prepare_github_providers(settings):
             except Exception as exc:
                 last_error = exc
         else:
+            provider["_disabledError"] = str(last_error)
             stats.append({
                 "source": provider.get("name") or "GitHub",
                 "ok": False,

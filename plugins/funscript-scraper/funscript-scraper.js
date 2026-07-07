@@ -3,9 +3,11 @@
 
   const ROUTE = "/funscript-scraper";
   const NAV_ID = "stash-fs-nav";
+  const LAUNCHER_ID = "stash-fs-launcher";
   const APP_ID = "stash-fs-root";
   const SETTINGS_KEY = "stash-funscript-scraper-settings-v1";
   const PAGE_SIZE = 40;
+  const MAX_PAGES = 500;
 
   const state = {
     pluginId: "",
@@ -16,6 +18,8 @@
     error: "",
     results: [],
     settings: loadSettings(),
+    routeRegistered: false,
+    routeContainer: null,
   };
 
   function el(tag, className, text) {
@@ -30,6 +34,26 @@
   }
 
   function loadSettings() {
+    const defaultProviders = [
+      {
+        name: "xqueezeme xtoys-scripts",
+        type: "github",
+        enabled: false,
+        repo: "xqueezeme/xtoys-scripts",
+        branch: "main",
+        path: "funscripts",
+        headers: {}
+      },
+      {
+        name: "FredTungsten Scripts",
+        type: "github",
+        enabled: false,
+        repo: "FredTungsten/Scripts",
+        branch: "main",
+        path: "",
+        headers: {}
+      }
+    ];
     const defaults = {
       dryRun: true,
       overwrite: false,
@@ -37,45 +61,23 @@
       tagName: "Funscript",
       minScore: 72,
       localFoldersText: "",
-      providersText: JSON.stringify(
-        [
-          {
-            name: "xqueezeme xtoys-scripts",
-            type: "github",
-            enabled: false,
-            repo: "xqueezeme/xtoys-scripts",
-            branch: "main",
-            path: "funscripts",
-            headers: {}
-          },
-          {
-            name: "FredTungsten Scripts",
-            type: "github",
-            enabled: false,
-            repo: "FredTungsten/Scripts",
-            branch: "main",
-            path: "",
-            headers: {}
-          },
-          {
-            name: "Example public index",
-            type: "regex",
-            enabled: false,
-            searchUrlTemplate: "https://example.test/search?q={query}",
-            resultRegex: "<a[^>]+href=[\"'](?<url>[^\"']+)[\"'][^>]*>(?<title>.*?)</a>",
-            downloadRegex: "href=[\"'](?<url>[^\"']+\\.funscript[^\"']*)[\"']",
-            headers: {}
-          }
-        ],
-        null,
-        2
-      ),
+      providers: defaultProviders,
       maxScenes: 10,
       scanAfterPlace: true,
     };
     try {
       const raw = window.localStorage && window.localStorage.getItem(SETTINGS_KEY);
-      return Object.assign(defaults, raw ? JSON.parse(raw) : {});
+      const loaded = Object.assign(defaults, raw ? JSON.parse(raw) : {});
+      if (!Array.isArray(loaded.providers)) {
+        try {
+          const parsedProviders = JSON.parse(loaded.providersText || "[]");
+          loaded.providers = Array.isArray(parsedProviders) ? parsedProviders : defaultProviders;
+        } catch (error) {
+          loaded.providers = defaultProviders;
+        }
+      }
+      delete loaded.providersText;
+      return loaded;
     } catch (error) {
       return defaults;
     }
@@ -90,13 +92,7 @@
   }
 
   function parsedSettings() {
-    let providers = [];
-    try {
-      providers = JSON.parse(state.settings.providersText || "[]");
-      if (!Array.isArray(providers)) providers = [];
-    } catch (error) {
-      throw new Error("Provider JSON is niet geldig");
-    }
+    const providers = Array.isArray(state.settings.providers) ? state.settings.providers : [];
     return {
       dryRun: !!state.settings.dryRun,
       overwrite: !!state.settings.overwrite,
@@ -152,7 +148,10 @@
   }
 
   function addNav() {
-    if (document.getElementById(NAV_ID)) return;
+    if (document.getElementById(NAV_ID)) {
+      removeLauncher();
+      return;
+    }
     const nav = findNav();
     if (!nav) return;
     const wrap = el("div", "stash-fs-nav-wrap");
@@ -164,7 +163,27 @@
     link.appendChild(el("span", "stash-fs-nav-text", "Funscripts"));
     link.addEventListener("click", navigate);
     wrap.appendChild(link);
-    nav.appendChild(wrap);
+    const pluginsLink = Array.from(nav.querySelectorAll("a,button")).find((node) => /plugins/i.test(node.textContent || ""));
+    if (pluginsLink && pluginsLink.parentElement && pluginsLink.parentElement.parentElement === nav) {
+      nav.insertBefore(wrap, pluginsLink.parentElement.nextSibling);
+    } else {
+      nav.appendChild(wrap);
+    }
+    removeLauncher();
+  }
+
+  function removeLauncher() {
+    const launcher = document.getElementById(LAUNCHER_ID);
+    if (launcher) launcher.remove();
+  }
+
+  function addLauncher() {
+    if (document.getElementById(NAV_ID) || document.getElementById(LAUNCHER_ID)) return;
+    const launcher = el("button", "stash-fs-launcher", "Funscripts");
+    launcher.id = LAUNCHER_ID;
+    launcher.type = "button";
+    launcher.addEventListener("click", navigate);
+    document.body.appendChild(launcher);
   }
 
   function getApp() {
@@ -225,7 +244,8 @@
     try {
       const all = [];
       const maxScenes = Math.max(1, Number(state.settings.maxScenes || 10));
-      for (let page = 1; all.length < maxScenes; page += 1) {
+      let total = 0;
+      for (let page = 1; all.length < maxScenes && page <= MAX_PAGES; page += 1) {
         const data = await graphql(
           `query FunscriptScenes($filter: FindFilterType) {
             findScenes(filter: $filter) {
@@ -246,13 +266,16 @@
           }`,
           { filter: { page, per_page: PAGE_SIZE, sort: "updated_at", direction: "DESC" } }
         );
-        const scenes = (((data || {}).findScenes || {}).scenes || []).filter((scene) => {
+        const result = (data || {}).findScenes || {};
+        const rawScenes = result.scenes || [];
+        total = typeof result.count === "number" ? result.count : total;
+        const scenes = rawScenes.filter((scene) => {
           const path = scenePath(scene);
           const hasScriptTag = (scene.tags || []).some((tag) => (tag.name || "").toLowerCase() === (state.settings.tagName || "Funscript").toLowerCase());
           return path && !hasScriptTag;
         });
         all.push(...scenes);
-        if (!scenes.length || all.length >= maxScenes) break;
+        if (!rawScenes.length || rawScenes.length < PAGE_SIZE || page * PAGE_SIZE >= total || all.length >= maxScenes) break;
       }
       state.scenes = all.slice(0, maxScenes);
       state.status = `${state.scenes.length} scenes klaar`;
@@ -388,6 +411,88 @@
     return input;
   }
 
+  function updateProvider(index, key, value) {
+    const providers = Array.isArray(state.settings.providers) ? state.settings.providers : [];
+    const provider = Object.assign({}, providers[index] || {});
+    provider[key] = value;
+    providers[index] = provider;
+    state.settings.providers = providers;
+    saveSettings();
+  }
+
+  function addGithubProvider() {
+    const providers = Array.isArray(state.settings.providers) ? state.settings.providers.slice() : [];
+    providers.push({
+      name: "GitHub funscripts",
+      type: "github",
+      enabled: false,
+      repo: "",
+      branch: "main",
+      path: "",
+      headers: {}
+    });
+    state.settings.providers = providers;
+    saveSettings();
+    render();
+  }
+
+  function removeProvider(index) {
+    const providers = Array.isArray(state.settings.providers) ? state.settings.providers.slice() : [];
+    providers.splice(index, 1);
+    state.settings.providers = providers;
+    saveSettings();
+    render();
+  }
+
+  function providerInput(provider, index, key, placeholder) {
+    const input = el("input");
+    input.type = "text";
+    input.value = provider[key] || "";
+    input.placeholder = placeholder || "";
+    input.addEventListener("input", () => updateProvider(index, key, input.value));
+    return input;
+  }
+
+  function renderProviders() {
+    const wrap = el("div", "stash-fs-providers");
+    const title = el("div", "stash-fs-subhead");
+    title.appendChild(el("strong", "", "GitHub bronnen"));
+    const add = el("button", "btn btn-secondary", "Bron toevoegen");
+    add.type = "button";
+    add.addEventListener("click", addGithubProvider);
+    title.appendChild(add);
+    wrap.appendChild(title);
+
+    const providers = Array.isArray(state.settings.providers) ? state.settings.providers : [];
+    providers.forEach((provider, index) => {
+      const card = el("div", "stash-fs-provider");
+      const top = el("div", "stash-fs-provider-top");
+      const enabled = el("label", "stash-fs-check");
+      const checkboxInput = el("input");
+      checkboxInput.type = "checkbox";
+      checkboxInput.checked = !!provider.enabled;
+      checkboxInput.addEventListener("change", () => updateProvider(index, "enabled", checkboxInput.checked));
+      enabled.appendChild(checkboxInput);
+      enabled.appendChild(el("span", "", provider.enabled ? "Aan" : "Uit"));
+      top.appendChild(enabled);
+      const remove = el("button", "btn btn-danger", "Verwijder");
+      remove.type = "button";
+      remove.addEventListener("click", () => removeProvider(index));
+      top.appendChild(remove);
+      card.appendChild(top);
+      card.appendChild(field("Naam", providerInput(provider, index, "name", "Mijn script repo")));
+      card.appendChild(field("Repo", providerInput(provider, index, "repo", "owner/repository")));
+      card.appendChild(field("Branch", providerInput(provider, index, "branch", "main")));
+      card.appendChild(field("Map in repo", providerInput(provider, index, "path", "funscripts")));
+      wrap.appendChild(card);
+    });
+
+    if (!providers.length) {
+      wrap.appendChild(el("p", "stash-fs-muted", "Nog geen bronnen toegevoegd."));
+    }
+    return wrap;
+  }
+
   function renderResult(item) {
     const result = item.result || {};
     const card = el("article", "stash-fs-result");
@@ -406,11 +511,7 @@
     return card;
   }
 
-  function render() {
-    addNav();
-    const app = getApp();
-    app.hidden = !isRoute();
-    if (app.hidden) return;
+  function renderContent(app) {
     clear(app);
 
     const head = el("section", "stash-fs-head");
@@ -428,7 +529,7 @@
     panel.appendChild(field("Minimum match score", textInput("minScore", "number")));
     panel.appendChild(field("Max scenes per run", textInput("maxScenes", "number")));
     panel.appendChild(field("Lokale scriptmappen, 1 per regel", textarea("localFoldersText", 4)));
-    panel.appendChild(field("Online providers JSON", textarea("providersText", 12)));
+    panel.appendChild(renderProviders());
 
     const actions = el("div", "stash-fs-actions");
     const load = el("button", "btn btn-secondary", state.loading ? "Laden..." : "Scenes laden");
@@ -465,12 +566,56 @@
     app.appendChild(layout);
   }
 
+  function render() {
+    addNav();
+    if (state.routeContainer) {
+      renderContent(state.routeContainer);
+      return;
+    }
+    const app = getApp();
+    app.hidden = !isRoute();
+    if (app.hidden) return;
+    renderContent(app);
+  }
+
+  function registerPluginRoute() {
+    const api = window.PluginApi;
+    if (!api || !api.React || !api.register || !api.register.route || window.__stashFsRouteRegistered) return;
+    window.__stashFsRouteRegistered = true;
+    state.routeRegistered = true;
+    const React = api.React;
+    function FunscriptScraperPage() {
+      const ref = React.useRef(null);
+      React.useEffect(() => {
+        if (!ref.current) return undefined;
+        state.routeContainer = ref.current;
+        ref.current.className = "stash-fs-app";
+        renderContent(ref.current);
+        return () => {
+          if (state.routeContainer === ref.current) state.routeContainer = null;
+        };
+      });
+      return React.createElement("div", { id: APP_ID, ref });
+    }
+    api.register.route(ROUTE, FunscriptScraperPage);
+  }
+
   function boot() {
+    registerPluginRoute();
     patchHistory();
     addNav();
+    window.setTimeout(() => {
+      addNav();
+      addLauncher();
+    }, 1500);
     render();
     window.addEventListener("stash-funscript-scraper-route", render);
-    window.setInterval(addNav, 2000);
+    window.addEventListener("popstate", render);
+    const observer = new MutationObserver(() => {
+      addNav();
+      addLauncher();
+    });
+    observer.observe(document.documentElement, { childList: true, subtree: true });
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);

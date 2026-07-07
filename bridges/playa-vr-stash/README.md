@@ -118,6 +118,62 @@ services:
 
 For TrueNAS, use addresses that are reachable from inside the bridge container. If Stash and the bridge run on the same TrueNAS host, the LAN IP and the published Stash port usually work well.
 
+### Multiple TrueNAS Instances
+
+Run one bridge container per Stash instance. Keep `PLAYA_BRIDGE_PORT` on the container port, usually `8890`, and change only the published host port on the left side of the `ports` mapping.
+
+For example, a normal flat Stash library on host port `8892` and a VR Stash library on host port `8890`:
+
+```yaml
+services:
+  playa-stash:
+    build:
+      context: >-
+        https://github.com/SJoWie80/Stash-Plugins.git#main:bridges/playa-vr-stash
+    container_name: playa-stash
+    environment:
+      PLAYA_BRIDGE_HOST: 0.0.0.0
+      PLAYA_BRIDGE_PORT: '8890'
+      PLAYA_SITE_NAME: 'Stash'
+      PLAYA_DEFAULT_PROJECTION: 'FLT'
+      PLAYA_DEFAULT_STEREO: 'MN'
+      PUBLIC_BRIDGE_URL: http://YOUR_SERVER_IP:8892
+      PUBLIC_STASH_URL: http://YOUR_SERVER_IP:NORMAL_STASH_PORT
+      STASH_API_KEY: >-
+        YOUR_NORMAL_STASH_API_KEY
+      STASH_URL: http://YOUR_SERVER_IP:NORMAL_STASH_PORT
+    ports:
+      - '8892:8890'
+    restart: unless-stopped
+
+  playa-stash-vr:
+    build:
+      context: >-
+        https://github.com/SJoWie80/Stash-Plugins.git#main:bridges/playa-vr-stash
+    container_name: playa-stash-vr
+    environment:
+      PLAYA_BRIDGE_HOST: 0.0.0.0
+      PLAYA_BRIDGE_PORT: '8890'
+      PLAYA_SITE_NAME: 'Stash VR'
+      PLAYA_DEFAULT_PROJECTION: '180'
+      PLAYA_DEFAULT_STEREO: 'LR'
+      PUBLIC_BRIDGE_URL: http://YOUR_SERVER_IP:8890
+      PUBLIC_STASH_URL: http://YOUR_SERVER_IP:VR_STASH_PORT
+      STASH_API_KEY: >-
+        YOUR_VR_STASH_API_KEY
+      STASH_URL: http://YOUR_SERVER_IP:VR_STASH_PORT
+    ports:
+      - '8890:8890'
+    restart: unless-stopped
+```
+
+Add both bridge URLs in PLAY'A as separate websites:
+
+```text
+http://YOUR_SERVER_IP:8892
+http://YOUR_SERVER_IP:8890
+```
+
 ## Configuration
 
 | Variable | Default | Description |

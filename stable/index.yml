@@ -40,10 +40,10 @@
 
 - id: funscript-scraper
   name: Funscript Scraper
-  version: 0.1.5
-  date: 2026-07-07 11:49:00
-  path: packages/funscript-scraper-v0.1.5.zip
-  sha256: 07cb2b43b267200cba6d45edebdb8f0843bca5334ecd5b5330635c39f949ce98
+  version: 0.1.6
+  date: 2026-07-07 11:58:00
+  path: packages/funscript-scraper-v0.1.6.zip
+  sha256: 7dc535186ed678e3f449bf99fd2d49225b0ad33a72e9319e616ebd8a8c994080
   metadata:
     description: Search, download, place, and tag funscripts for Stash scenes.
     url: https://github.com/SJoWie80/Stash-Plugins

@@ -432,6 +432,19 @@ def search_download(args):
             return {"output": {"ok": False, "matched": False, "targetPath": target_path}}
         if candidate.get("error"):
             return {"output": {"ok": False, "matched": False, "candidate": candidate, "targetPath": target_path}}
+        if dry_run:
+            return {
+                "output": {
+                    "ok": True,
+                    "matched": True,
+                    "candidate": candidate,
+                    "stats": {},
+                    "placement": {"placed": False, "reason": "dry run"},
+                    "targetPath": target_path,
+                    "dryRun": True,
+                    "timestamp": int(time.time()),
+                }
+            }
 
         source_path = candidate.get("localPath")
         if not source_path and candidate.get("url"):

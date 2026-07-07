@@ -4,6 +4,7 @@ import math
 import os
 import re
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -62,6 +63,9 @@ CHROMA_KEY_BRIGHTNESS = float(os.environ.get("PLAYA_CHROMA_KEY_BRIGHTNESS", "-0.
 PAGE_SIZE_MAX = 100
 SCAN_PAGE_SIZE = int(os.environ.get("PLAYA_SCAN_PAGE_SIZE", "250"))
 SCAN_MAX_PAGES = int(os.environ.get("PLAYA_SCAN_MAX_PAGES", "200"))
+CACHE_TTL_SECONDS = max(0, int(os.environ.get("PLAYA_CACHE_TTL", "60")))
+CACHE_MAX_ITEMS = max(1, int(os.environ.get("PLAYA_CACHE_MAX_ITEMS", "256")))
+NEW_DAYS = max(0, int(os.environ.get("PLAYA_NEW_DAYS", "30")))
 DEFAULT_PROJECTION = os.environ.get("PLAYA_DEFAULT_PROJECTION", "180").upper()
 DEFAULT_STEREO = os.environ.get("PLAYA_DEFAULT_STEREO", "LR").upper()
 SHOW_VIDEO_STATUS = os.environ.get("PLAYA_SHOW_VIDEO_STATUS", "false").lower() in {"1", "true", "yes", "on"}
@@ -73,6 +77,10 @@ IMAGE_SHAPES = {
     "portrait": (IMAGE_TILE_SIZE, int(IMAGE_TILE_SIZE * 1.35)),
     "video": (IMAGE_TILE_SIZE, int(IMAGE_TILE_SIZE * 9 / 16)),
 }
+GRAPHQL_CACHE = {}
+GRAPHQL_CACHE_LOCK = threading.Lock()
+GRAPHQL_CACHE_HITS = 0
+GRAPHQL_CACHE_MISSES = 0
 
 
 def log(message):
@@ -101,7 +109,57 @@ def page_response(page_index, page_size, total, content):
     }
 
 
+def cache_key(query, variables):
+    return json.dumps([query, variables or {}], sort_keys=True, separators=(",", ":"))
+
+
+def get_cached_graphql(query, variables):
+    global GRAPHQL_CACHE_HITS, GRAPHQL_CACHE_MISSES
+    if CACHE_TTL_SECONDS <= 0:
+        GRAPHQL_CACHE_MISSES += 1
+        return None
+    key = cache_key(query, variables)
+    now = time.time()
+    with GRAPHQL_CACHE_LOCK:
+        cached = GRAPHQL_CACHE.get(key)
+        if cached and cached[0] > now:
+            GRAPHQL_CACHE_HITS += 1
+            return cached[1]
+        if cached:
+            GRAPHQL_CACHE.pop(key, None)
+        GRAPHQL_CACHE_MISSES += 1
+    return None
+
+
+def set_cached_graphql(query, variables, data):
+    if CACHE_TTL_SECONDS <= 0:
+        return
+    key = cache_key(query, variables)
+    expires_at = time.time() + CACHE_TTL_SECONDS
+    with GRAPHQL_CACHE_LOCK:
+        if len(GRAPHQL_CACHE) >= CACHE_MAX_ITEMS:
+            oldest_key = min(GRAPHQL_CACHE, key=lambda item: GRAPHQL_CACHE[item][0])
+            GRAPHQL_CACHE.pop(oldest_key, None)
+        GRAPHQL_CACHE[key] = (expires_at, data)
+
+
+def graphql_cache_stats():
+    with GRAPHQL_CACHE_LOCK:
+        return {
+            "enabled": CACHE_TTL_SECONDS > 0,
+            "ttl_seconds": CACHE_TTL_SECONDS,
+            "max_items": CACHE_MAX_ITEMS,
+            "items": len(GRAPHQL_CACHE),
+            "hits": GRAPHQL_CACHE_HITS,
+            "misses": GRAPHQL_CACHE_MISSES,
+        }
+
+
 def graphql(query, variables=None):
+    cached = get_cached_graphql(query, variables)
+    if cached is not None:
+        return cached
+
     body = json.dumps({"query": query, "variables": variables or {}}).encode("utf-8")
     headers = {"Content-Type": "application/json"}
     if STASH_API_KEY:
@@ -122,7 +180,14 @@ def graphql(query, variables=None):
         message = "; ".join(error.get("message", str(error)) for error in payload["errors"])
         log(f"graphql error: {message}")
         raise RuntimeError(message)
-    return payload.get("data") or {}
+    data = payload.get("data") or {}
+    set_cached_graphql(query, variables, data)
+    return data
+
+
+def clear_graphql_cache():
+    with GRAPHQL_CACHE_LOCK:
+        GRAPHQL_CACHE.clear()
 
 
 def absolute_url(value):
@@ -189,6 +254,26 @@ def unix_date(value):
         return int(time.mktime(time.strptime(value[:10], "%Y-%m-%d")))
     except Exception:
         return None
+
+
+def unix_timestamp(value):
+    if not value:
+        return None
+    for fmt, length in (("%Y-%m-%dT%H:%M:%S", 19), ("%Y-%m-%d %H:%M:%S", 19), ("%Y-%m-%d", 10)):
+        try:
+            return int(time.mktime(time.strptime(value[:length], fmt)))
+        except Exception:
+            pass
+    return None
+
+
+def is_new_scene(scene):
+    if NEW_DAYS <= 0:
+        return False
+    created_at = unix_timestamp(scene.get("created_at"))
+    if not created_at:
+        return False
+    return created_at >= int(time.time()) - (NEW_DAYS * 86400)
 
 
 def infer_projection_and_stereo(scene):
@@ -275,6 +360,8 @@ def scene_status_ids(scene):
         statuses.add("watched")
     else:
         statuses.add("unwatched")
+    if is_new_scene(scene):
+        statuses.add("new")
     if is_passthrough(scene):
         statuses.add("passthrough")
     return statuses
@@ -404,6 +491,7 @@ SCENE_FIELDS = """
   title
   details
   date
+  created_at
   play_count
   rating100
   organized
@@ -420,7 +508,7 @@ def find_scenes(params, bridge_base_url):
     page_size = min(PAGE_SIZE_MAX, max(1, int(params.get("page-size", ["30"])[0] or 30)))
     order = params.get("order", [""])[0]
     direction = params.get("direction", ["desc"])[0].upper()
-    sort_map = {"title": "title", "release_date": "date", "popularity": "play_count"}
+    sort_map = {"title": "title", "release_date": "date", "popularity": "play_count", "added": "created_at"}
     find_filter = {
         "page": page_index + 1,
         "per_page": page_size,
@@ -438,6 +526,8 @@ def find_scenes(params, bridge_base_url):
         "included_statuses": [value for value in str(params.get("included-statuses", [""])[0] or "").split(",") if value],
         "excluded_statuses": [value for value in str(params.get("excluded-statuses", [""])[0] or "").split(",") if value],
     }
+    if not order and "new" in relation_filters["included_statuses"]:
+        find_filter["sort"] = "created_at"
     if any(relation_filters.values()):
         return find_scenes_by_scan(find_filter, relation_filters, page_index, page_size, bridge_base_url)
 
@@ -731,6 +821,8 @@ def get_video_statuses():
         {"id": "rated", "title": "Rated"},
         {"id": "passthrough", "title": "Passthrough"},
     ]
+    if NEW_DAYS > 0:
+        statuses.insert(0, {"id": "new", "title": "New"})
     if SHOW_VIDEO_STATUS:
         statuses.insert(0, {"id": "published", "title": "Published"})
     return statuses
@@ -774,6 +866,11 @@ class Handler(BaseHTTPRequestHandler):
             "stash_url": STASH_URL,
             "public_stash_url": PUBLIC_STASH_URL,
             "public_bridge_url": PUBLIC_BRIDGE_URL or self.bridge_base_url(),
+            "site_name": SITE_NAME,
+            "default_projection": DEFAULT_PROJECTION,
+            "default_stereo": DEFAULT_STEREO,
+            "new_days": NEW_DAYS,
+            "cache": graphql_cache_stats(),
         }
         try:
             data = graphql("query PlayaHealth { version { version } }", {})
@@ -932,8 +1029,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(ok({"name": "Stash PLAY'A VR Bridge", "api": "/api/playa/v2"}))
             elif path in ("/health", "/debug/stash"):
                 self.health()
+            elif path == "/debug/cache":
+                self.send_json(ok(graphql_cache_stats()))
             elif path == "/version":
-                self.send_json(ok("1.10.0"))
+                self.send_json(ok("1.11.0"))
             elif path == "/config":
                 self.send_json(
                     ok(
@@ -951,6 +1050,7 @@ class Handler(BaseHTTPRequestHandler):
                             "analytics": True,
                             "nsfw": False,
                             "ar": False,
+                            "new_days": NEW_DAYS,
                         }
                     )
                 )
@@ -1014,6 +1114,9 @@ class Handler(BaseHTTPRequestHandler):
             pass
         if path == "/event":
             self.send_json(ok())
+        elif path == "/debug/cache/clear":
+            clear_graphql_cache()
+            self.send_json(ok(graphql_cache_stats()))
         elif path.startswith("/auth/"):
             self.send_json(fail("Authentication is disabled", 401))
         else:

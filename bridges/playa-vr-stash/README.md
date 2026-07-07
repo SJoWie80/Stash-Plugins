@@ -63,6 +63,8 @@ services:
       PLAYA_DEFAULT_STEREO: "LR"
       PLAYA_SHOW_VIDEO_STATUS: "false"
       PLAYA_IMAGE_TILE_SIZE: "512"
+      PLAYA_CACHE_TTL: "60"
+      PLAYA_NEW_DAYS: "30"
       PLAYA_SITE_NAME: "Stash"
       PLAYA_SITE_LOGO: ""
       PLAYA_PASSTHROUGH_TAGS: "Passthrough"
@@ -102,6 +104,8 @@ services:
       PLAYA_DEFAULT_STEREO: 'LR'
       PLAYA_SHOW_VIDEO_STATUS: 'false'
       PLAYA_IMAGE_TILE_SIZE: '512'
+      PLAYA_CACHE_TTL: '60'
+      PLAYA_NEW_DAYS: '30'
       PLAYA_SITE_NAME: 'Stash'
       PLAYA_SITE_LOGO: ''
       PLAYA_PASSTHROUGH_TAGS: 'Passthrough'
@@ -137,6 +141,8 @@ services:
       PLAYA_SITE_NAME: 'Stash'
       PLAYA_DEFAULT_PROJECTION: 'FLT'
       PLAYA_DEFAULT_STEREO: 'MN'
+      PLAYA_CACHE_TTL: '60'
+      PLAYA_NEW_DAYS: '30'
       PUBLIC_BRIDGE_URL: http://YOUR_SERVER_IP:8892
       PUBLIC_STASH_URL: http://YOUR_SERVER_IP:NORMAL_STASH_PORT
       STASH_API_KEY: >-
@@ -157,6 +163,8 @@ services:
       PLAYA_SITE_NAME: 'Stash VR'
       PLAYA_DEFAULT_PROJECTION: '180'
       PLAYA_DEFAULT_STEREO: 'LR'
+      PLAYA_CACHE_TTL: '60'
+      PLAYA_NEW_DAYS: '30'
       PUBLIC_BRIDGE_URL: http://YOUR_SERVER_IP:8890
       PUBLIC_STASH_URL: http://YOUR_SERVER_IP:VR_STASH_PORT
       STASH_API_KEY: >-
@@ -188,6 +196,9 @@ http://YOUR_SERVER_IP:8890
 | `PLAYA_DEFAULT_STEREO` | `LR` | Default stereo. Use `LR` for side-by-side, `TB` for over-under, or `MN` for mono. |
 | `PLAYA_SCAN_PAGE_SIZE` | `250` | Internal page size used when scanning scenes for filtering and counts. |
 | `PLAYA_SCAN_MAX_PAGES` | `200` | Maximum internal pages scanned. |
+| `PLAYA_CACHE_TTL` | `60` | Seconds to cache successful Stash GraphQL responses in memory. Use `0` to disable caching. |
+| `PLAYA_CACHE_MAX_ITEMS` | `256` | Maximum number of GraphQL responses kept in memory. |
+| `PLAYA_NEW_DAYS` | `30` | Scenes added within this many days are exposed through the PLAY'A `New` video status. Use `0` to disable it. |
 | `PLAYA_SHOW_VIDEO_STATUS` | `false` | Show PLAY'A video status badges such as `Published`. |
 | `PLAYA_IMAGE_TILE_SIZE` | `512` | Base size for generated thumbnails. |
 | `PLAYA_SITE_NAME` | `Stash` | Website name shown in PLAY'A. Useful when running multiple bridge instances. |
@@ -229,6 +240,18 @@ http://YOUR_SERVER_IP:8890/api/playa/v2/health
 ```
 
 It shows the bridge status, the configured Stash URL, and whether Stash GraphQL is reachable.
+
+The health response also includes cache settings and hit/miss counts. To inspect only the cache:
+
+```text
+http://YOUR_SERVER_IP:8890/api/playa/v2/debug/cache
+```
+
+To clear the in-memory GraphQL cache, send a POST request to:
+
+```text
+http://YOUR_SERVER_IP:8890/api/playa/v2/debug/cache/clear
+```
 
 ## Troubleshooting
 

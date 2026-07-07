@@ -17,6 +17,8 @@
     status: "",
     error: "",
     results: [],
+    processedCount: 0,
+    matchedCount: 0,
     settings: loadSettings(),
     routeRegistered: false,
     routeContainer: null,
@@ -119,8 +121,8 @@
   function navigate(event) {
     if (event) event.preventDefault();
     window.history.pushState({}, "", ROUTE);
+    window.dispatchEvent(new PopStateEvent("popstate"));
     notifyRouteChange();
-    render();
   }
 
   function patchHistory() {
@@ -148,28 +150,27 @@
   }
 
   function addNav() {
-    if (document.getElementById(NAV_ID)) {
-      removeLauncher();
-      return;
-    }
-    const nav = findNav();
-    if (!nav) return;
-    const wrap = el("div", "stash-fs-nav-wrap");
-    wrap.id = NAV_ID;
-    const link = el("a", "nav-link stash-fs-nav-button");
-    link.href = ROUTE;
-    link.setAttribute("aria-label", "Funscripts");
-    link.appendChild(el("span", "fa fa-bolt fas fa-bolt stash-fs-nav-icon"));
-    link.appendChild(el("span", "stash-fs-nav-text", "Funscripts"));
-    link.addEventListener("click", navigate);
-    wrap.appendChild(link);
-    const pluginsLink = Array.from(nav.querySelectorAll("a,button")).find((node) => /plugins/i.test(node.textContent || ""));
-    if (pluginsLink && pluginsLink.parentElement && pluginsLink.parentElement.parentElement === nav) {
-      nav.insertBefore(wrap, pluginsLink.parentElement.nextSibling);
-    } else {
+    try {
+      if (document.getElementById(NAV_ID)) {
+        removeLauncher();
+        return;
+      }
+      const nav = findNav();
+      if (!nav) return;
+      const wrap = el("div", "stash-fs-nav-wrap");
+      wrap.id = NAV_ID;
+      const link = el("a", "nav-link stash-fs-nav-button");
+      link.href = ROUTE;
+      link.setAttribute("aria-label", "Funscripts");
+      link.appendChild(el("span", "fa fa-bolt fas fa-bolt stash-fs-nav-icon"));
+      link.appendChild(el("span", "stash-fs-nav-text", "Funscripts"));
+      link.addEventListener("click", navigate);
+      wrap.appendChild(link);
       nav.appendChild(wrap);
+      removeLauncher();
+    } catch (error) {
+      console.error("[Funscript Scraper] failed adding nav", error);
     }
-    removeLauncher();
   }
 
   function removeLauncher() {
@@ -245,7 +246,11 @@
       const all = [];
       const maxScenes = Math.max(1, Number(state.settings.maxScenes || 10));
       let total = 0;
+      let pagesChecked = 0;
       for (let page = 1; all.length < maxScenes && page <= MAX_PAGES; page += 1) {
+        pagesChecked = page;
+        state.status = `Scenes zoeken: ${all.length}/${maxScenes} geselecteerd`;
+        render();
         const data = await graphql(
           `query FunscriptScenes($filter: FindFilterType) {
             findScenes(filter: $filter) {
@@ -278,7 +283,7 @@
         if (!rawScenes.length || rawScenes.length < PAGE_SIZE || page * PAGE_SIZE >= total || all.length >= maxScenes) break;
       }
       state.scenes = all.slice(0, maxScenes);
-      state.status = `${state.scenes.length} scenes klaar`;
+      state.status = `${state.scenes.length} scenes klaar uit ${pagesChecked} pagina's`;
     } catch (error) {
       state.error = error.message || String(error);
       state.status = "";
@@ -340,6 +345,8 @@
     state.running = true;
     state.error = "";
     state.results = [];
+    state.processedCount = 0;
+    state.matchedCount = 0;
     render();
     try {
       const settings = parsedSettings();
@@ -347,7 +354,8 @@
       const tagId = settings.dryRun ? "" : await ensureTag(settings.tagName || "Funscript");
       for (let index = 0; index < state.scenes.length; index += 1) {
         const scene = state.scenes[index];
-        state.status = `Scene ${index + 1}/${state.scenes.length}: ${scene.title || scenePath(scene)}`;
+        state.processedCount = index;
+        state.status = `Scraped ${index}/${state.scenes.length} - hits ${state.matchedCount}`;
         render();
         const result = await pluginOperation({ action: "search-download", scene: scenePayload(scene), settings });
         const placed = result && result.placement && result.placement.placed;
@@ -355,10 +363,14 @@
           await addTagToScene(scene, tagId);
           if (settings.scanAfterPlace) await scanPath(scenePath(scene));
         }
-        state.results.unshift({ scene, result });
+        if (result && result.matched) {
+          state.matchedCount += 1;
+          state.results.unshift({ scene, result });
+        }
+        state.processedCount = index + 1;
         render();
       }
-      state.status = "Klaar";
+      state.status = `Klaar: scraped ${state.scenes.length}/${state.scenes.length} - hits ${state.matchedCount}`;
     } catch (error) {
       state.error = error.message || String(error);
       state.status = "";
@@ -547,18 +559,24 @@
     const main = el("div", "stash-fs-main");
     if (state.status) main.appendChild(el("div", "stash-fs-status", state.status));
     if (state.error) main.appendChild(el("div", "stash-fs-error", state.error));
-    const queue = el("div", "stash-fs-queue");
-    queue.appendChild(el("h2", "", `Queue (${state.scenes.length})`));
-    state.scenes.slice(0, 20).forEach((scene) => {
-      const row = el("div", "stash-fs-scene");
-      row.appendChild(el("strong", "", scene.title || "(zonder titel)"));
-      row.appendChild(el("code", "", scenePath(scene)));
-      queue.appendChild(row);
-    });
-    main.appendChild(queue);
+    const progress = el("div", "stash-fs-progress");
+    const total = state.scenes.length || Math.max(1, Number(state.settings.maxScenes || 10));
+    const processed = Math.min(state.processedCount || 0, total);
+    progress.appendChild(el("strong", "", `Scraped ${processed}/${total}`));
+    progress.appendChild(el("span", "", `Hits ${state.matchedCount || 0}`));
+    const meter = el("div", "stash-fs-meter");
+    const bar = el("div", "stash-fs-meter-bar");
+    bar.style.width = `${Math.min(100, Math.round((processed / Math.max(1, total)) * 100))}%`;
+    meter.appendChild(bar);
+    progress.appendChild(meter);
+    main.appendChild(progress);
     const results = el("div", "stash-fs-results");
-    results.appendChild(el("h2", "", `Resultaten (${state.results.length})`));
-    state.results.forEach((item) => results.appendChild(renderResult(item)));
+    results.appendChild(el("h2", "", `Hits (${state.results.length})`));
+    if (!state.results.length) {
+      results.appendChild(el("p", "stash-fs-muted", state.running ? "Nog geen hits." : "Geen hits in deze run."));
+    } else {
+      state.results.forEach((item) => results.appendChild(renderResult(item)));
+    }
     main.appendChild(results);
 
     layout.appendChild(panel);
@@ -570,6 +588,11 @@
     addNav();
     if (state.routeContainer) {
       renderContent(state.routeContainer);
+      return;
+    }
+    if (state.routeRegistered) {
+      const fallback = document.body.querySelector(`main#${APP_ID}`);
+      if (fallback) fallback.remove();
       return;
     }
     const app = getApp();
@@ -588,6 +611,8 @@
       const ref = React.useRef(null);
       React.useEffect(() => {
         if (!ref.current) return undefined;
+        const fallback = document.body.querySelector(`main#${APP_ID}`);
+        if (fallback) fallback.remove();
         state.routeContainer = ref.current;
         ref.current.className = "stash-fs-app";
         renderContent(ref.current);

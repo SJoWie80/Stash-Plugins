@@ -171,6 +171,33 @@
   transition: width 160ms ease;
 }
 
+.stash-fs-provider-stats {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.stash-fs-provider-stats h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.stash-fs-source-row,
+.stash-fs-error-lite {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid #2a3038;
+  border-radius: 8px;
+  background: #121519;
+}
+
+.stash-fs-source-row code,
+.stash-fs-error-lite code {
+  overflow-wrap: anywhere;
+  color: #b8c0cc;
+}
+
 .stash-fs-scene,
 .stash-fs-result {
   display: grid;

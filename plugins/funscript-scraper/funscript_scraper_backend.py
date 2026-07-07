@@ -244,6 +244,15 @@ def github_tree(repo, branch, headers):
     return data.get("tree") or []
 
 
+def cached_github_tree(provider, branch):
+    cache = provider.setdefault("_treeCache", {})
+    repo = str(provider.get("repo") or "").strip().strip("/")
+    key = "{}@{}".format(repo, branch)
+    if key not in cache:
+        cache[key] = github_tree(repo, branch, provider.get("headers") or {})
+    return cache[key]
+
+
 def find_github(scene, provider, min_score):
     repo = str(provider.get("repo") or "").strip().strip("/")
     if not repo or "/" not in repo:
@@ -262,7 +271,7 @@ def find_github(scene, provider, min_score):
     used_branch = ""
     for candidate_branch in dict.fromkeys(branches):
         try:
-            tree = github_tree(repo, candidate_branch, headers)
+            tree = cached_github_tree(provider, candidate_branch)
             used_branch = candidate_branch
             break
         except Exception as exc:
@@ -307,6 +316,47 @@ def find_github(scene, provider, min_score):
                 "headers": headers,
             }
     return best
+
+
+def prepare_github_providers(settings):
+    stats = []
+    for provider in settings.get("providers") or []:
+        if not provider or provider.get("enabled") is False:
+            continue
+        if str(provider.get("type") or "regex").lower() != "github":
+            continue
+        repo = str(provider.get("repo") or "").strip().strip("/")
+        if not repo or "/" not in repo:
+            stats.append({"source": provider.get("name") or "GitHub", "ok": False, "error": "missing repo"})
+            continue
+        branches = []
+        branch = str(provider.get("branch") or "").strip()
+        if branch:
+            branches.append(branch)
+        branches.extend(["main", "master"])
+        last_error = None
+        for candidate_branch in dict.fromkeys(branches):
+            try:
+                tree = cached_github_tree(provider, candidate_branch)
+                count = sum(1 for item in tree if item.get("type") == "blob" and str(item.get("path") or "").lower().endswith(".funscript"))
+                stats.append({
+                    "source": provider.get("name") or "GitHub",
+                    "ok": True,
+                    "repo": repo,
+                    "branch": candidate_branch,
+                    "funscripts": count,
+                })
+                break
+            except Exception as exc:
+                last_error = exc
+        else:
+            stats.append({
+                "source": provider.get("name") or "GitHub",
+                "ok": False,
+                "repo": repo,
+                "error": str(last_error),
+            })
+    return stats
 
 
 def download_candidate(candidate):
@@ -387,10 +437,58 @@ def search_download(args):
                 pass
 
 
+def batch_search_download(args):
+    scenes = arg_value(args, "scenes", []) or []
+    settings = arg_value(args, "settings", {}) or {}
+    results = []
+    errors = []
+    provider_stats = []
+    processed = 0
+    matched = 0
+
+    if settings.get("enableOnline"):
+        provider_stats = prepare_github_providers(settings)
+
+    for scene in scenes:
+        processed += 1
+        try:
+            result = search_download({"scene": scene, "settings": settings})
+            output = result.get("output") if isinstance(result, dict) else None
+            if result.get("error"):
+                errors.append({"sceneId": scene.get("id"), "title": scene.get("title"), "error": result.get("error")})
+            if output and output.get("candidate", {}).get("error"):
+                errors.append({
+                    "sceneId": scene.get("id"),
+                    "title": scene.get("title"),
+                    "error": output.get("candidate", {}).get("error"),
+                    "source": output.get("candidate", {}).get("source"),
+                })
+            if output and output.get("matched"):
+                matched += 1
+                results.append({"sceneId": scene.get("id"), "scene": scene, "result": output})
+        except Exception as exc:
+            errors.append({"sceneId": scene.get("id"), "title": scene.get("title"), "error": str(exc)})
+
+    return {
+        "output": {
+            "ok": True,
+            "processed": processed,
+            "matched": matched,
+            "results": results,
+            "errors": errors[:50],
+            "errorCount": len(errors),
+            "providerStats": provider_stats,
+            "timestamp": int(time.time()),
+        }
+    }
+
+
 def main():
     payload = read_input()
     args = payload.get("args") or {}
     action = str(arg_value(args, "action", "search-download") or "search-download").lower()
+    if action == "batch-search-download":
+        return batch_search_download(args)
     if action == "search-download":
         return search_download(args)
     return {"error": "Unknown action"}

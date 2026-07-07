@@ -17,6 +17,9 @@
     status: "",
     error: "",
     results: [],
+    providerStats: [],
+    errorCount: 0,
+    sampleErrors: [],
     processedCount: 0,
     matchedCount: 0,
     settings: loadSettings(),
@@ -345,6 +348,9 @@
     state.running = true;
     state.error = "";
     state.results = [];
+    state.providerStats = [];
+    state.errorCount = 0;
+    state.sampleErrors = [];
     state.processedCount = 0;
     state.matchedCount = 0;
     render();
@@ -352,25 +358,33 @@
       const settings = parsedSettings();
       if (!state.scenes.length) await loadScenes();
       const tagId = settings.dryRun ? "" : await ensureTag(settings.tagName || "Funscript");
-      for (let index = 0; index < state.scenes.length; index += 1) {
-        const scene = state.scenes[index];
-        state.processedCount = index;
-        state.status = `Scraped ${index}/${state.scenes.length} - hits ${state.matchedCount}`;
-        render();
-        const result = await pluginOperation({ action: "search-download", scene: scenePayload(scene), settings });
-        const placed = result && result.placement && result.placement.placed;
-        if (placed && tagId) {
-          await addTagToScene(scene, tagId);
-          if (settings.scanAfterPlace) await scanPath(scenePath(scene));
+      const scenes = state.scenes.map(scenePayload);
+      state.status = `GitHub bronnen indexeren en ${scenes.length} scenes matchen...`;
+      render();
+      const output = await pluginOperation({ action: "batch-search-download", scenes, settings });
+      state.providerStats = output.providerStats || [];
+      state.errorCount = output.errorCount || 0;
+      state.sampleErrors = output.errors || [];
+      state.processedCount = output.processed || scenes.length;
+      state.matchedCount = output.matched || 0;
+      const byId = {};
+      state.scenes.forEach((scene) => {
+        byId[scene.id] = scene;
+      });
+      state.results = (output.results || []).map((item) => ({
+        scene: byId[item.sceneId] || item.scene || {},
+        result: item.result || {},
+      }));
+      if (tagId) {
+        for (const item of state.results) {
+          const placed = item.result && item.result.placement && item.result.placement.placed;
+          if (placed && item.scene && item.scene.id) {
+            await addTagToScene(item.scene, tagId);
+            if (settings.scanAfterPlace) await scanPath(scenePath(item.scene));
+          }
         }
-        if (result && result.matched) {
-          state.matchedCount += 1;
-          state.results.unshift({ scene, result });
-        }
-        state.processedCount = index + 1;
-        render();
       }
-      state.status = `Klaar: scraped ${state.scenes.length}/${state.scenes.length} - hits ${state.matchedCount}`;
+      state.status = `Klaar: scraped ${state.processedCount}/${state.scenes.length} - hits ${state.matchedCount}`;
     } catch (error) {
       state.error = error.message || String(error);
       state.status = "";
@@ -523,6 +537,33 @@
     return card;
   }
 
+  function renderProviderStats() {
+    const wrap = el("div", "stash-fs-provider-stats");
+    if (!state.providerStats.length && !state.errorCount) return wrap;
+    wrap.appendChild(el("h2", "", "Bronnen"));
+    state.providerStats.forEach((stat) => {
+      const row = el("div", "stash-fs-source-row");
+      row.appendChild(el("strong", "", stat.source || "Bron"));
+      if (stat.ok) {
+        row.appendChild(el("span", "stash-fs-pill ok", `${stat.funscripts || 0} scripts`));
+        row.appendChild(el("code", "", `${stat.repo || ""}@${stat.branch || ""}`));
+      } else {
+        row.appendChild(el("span", "stash-fs-pill warn", "error"));
+        row.appendChild(el("code", "", stat.error || ""));
+      }
+      wrap.appendChild(row);
+    });
+    if (state.errorCount) {
+      const error = el("div", "stash-fs-error-lite");
+      error.appendChild(el("strong", "", `${state.errorCount} provider/download errors`));
+      state.sampleErrors.slice(0, 5).forEach((item) => {
+        error.appendChild(el("code", "", `${item.source || ""} ${item.title || item.sceneId || ""}: ${item.error || ""}`));
+      });
+      wrap.appendChild(error);
+    }
+    return wrap;
+  }
+
   function renderContent(app) {
     clear(app);
 
@@ -570,6 +611,7 @@
     meter.appendChild(bar);
     progress.appendChild(meter);
     main.appendChild(progress);
+    main.appendChild(renderProviderStats());
     const results = el("div", "stash-fs-results");
     results.appendChild(el("h2", "", `Hits (${state.results.length})`));
     if (!state.results.length) {

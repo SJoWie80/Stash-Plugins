@@ -1,0 +1,14 @@
+services:
+  funscript-generator:
+    build: .
+    container_name: funscript-generator
+    restart: unless-stopped
+    ports:
+      - "8891:8891"
+    environment:
+      FUNSCRIPT_HOST: "0.0.0.0"
+      FUNSCRIPT_PORT: "8891"
+      MEDIA_ROOTS: "/videos"
+      OUTPUT_DIR: ""
+    volumes:
+      - "D:/Stash/Videos:/videos"

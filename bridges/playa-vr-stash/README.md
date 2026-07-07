@@ -63,6 +63,7 @@ services:
       PLAYA_DEFAULT_STEREO: "LR"
       PLAYA_SHOW_VIDEO_STATUS: "false"
       PLAYA_IMAGE_TILE_SIZE: "512"
+      PLAYA_SITE_NAME: "Stash"
       PLAYA_SITE_LOGO: ""
       PLAYA_PASSTHROUGH_TAGS: "Passthrough"
       PLAYA_PASSTHROUGH_MODE: "1"
@@ -101,6 +102,7 @@ services:
       PLAYA_DEFAULT_STEREO: 'LR'
       PLAYA_SHOW_VIDEO_STATUS: 'false'
       PLAYA_IMAGE_TILE_SIZE: '512'
+      PLAYA_SITE_NAME: 'Stash'
       PLAYA_SITE_LOGO: ''
       PLAYA_PASSTHROUGH_TAGS: 'Passthrough'
       PLAYA_PASSTHROUGH_MODE: '1'
@@ -132,6 +134,7 @@ For TrueNAS, use addresses that are reachable from inside the bridge container. 
 | `PLAYA_SCAN_MAX_PAGES` | `200` | Maximum internal pages scanned. |
 | `PLAYA_SHOW_VIDEO_STATUS` | `false` | Show PLAY'A video status badges such as `Published`. |
 | `PLAYA_IMAGE_TILE_SIZE` | `512` | Base size for generated thumbnails. |
+| `PLAYA_SITE_NAME` | `Stash` | Website name shown in PLAY'A. Useful when running multiple bridge instances. |
 | `PLAYA_SITE_LOGO` | bundled Stash logo | Optional absolute URL for a custom 256x256 transparent PNG logo shown on PLAY'A's website/home screen. |
 | `PLAYA_PASSTHROUGH_TAGS` | `Passthrough` | Comma-separated Stash tag names that mark scenes as PLAY'A passthrough/AR videos. |
 | `PLAYA_PASSTHROUGH_MODE` | `1` | PLAY'A transparency mode for passthrough-tagged scenes. Use `1` for embedded alpha mask or `2` for chroma key. |

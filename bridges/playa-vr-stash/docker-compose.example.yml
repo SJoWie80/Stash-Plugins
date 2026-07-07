@@ -15,3 +15,4 @@ services:
       PLAYA_DEFAULT_STEREO: "LR"
       PLAYA_SHOW_VIDEO_STATUS: "false"
       PLAYA_IMAGE_TILE_SIZE: "512"
+      PLAYA_SITE_NAME: "Stash"

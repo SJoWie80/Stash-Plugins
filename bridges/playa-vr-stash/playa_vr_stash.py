@@ -29,6 +29,7 @@ PUBLIC_BRIDGE_URL = os.environ.get("PUBLIC_BRIDGE_URL", "").rstrip("/")
 STASH_API_KEY = os.environ.get("STASH_API_KEY", "")
 HOST = os.environ.get("PLAYA_BRIDGE_HOST", "0.0.0.0")
 PORT = int(os.environ.get("PLAYA_BRIDGE_PORT", "8890"))
+SITE_NAME = os.environ.get("PLAYA_SITE_NAME", "Stash").strip() or "Stash"
 SITE_LOGO_URL = os.environ.get("PLAYA_SITE_LOGO", "").strip()
 SITE_LOGO_PATH = os.environ.get("PLAYA_SITE_LOGO_PATH", "/app/assets/stash.png")
 PASSTHROUGH_TAG_NAMES = {
@@ -937,7 +938,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(
                     ok(
                         {
-                            "site_name": "Stash",
+                            "site_name": SITE_NAME,
                             "site_logo": site_logo_url(self.bridge_base_url()),
                             "auth": False,
                             "auth_by_code": False,

@@ -8,7 +8,7 @@
   const SETTINGS_KEY = "stash-funscript-scraper-settings-v1";
   const PAGE_SIZE = 40;
   const MAX_PAGES = 500;
-  const SCRAPE_CHUNK_SIZE = 20;
+  const SCRAPE_CHUNK_SIZE = 100;
 
   const state = {
     pluginId: "",
@@ -106,7 +106,7 @@
       overwrite: !!state.settings.overwrite,
       enableOnline: !!state.settings.enableOnline,
       tagName: state.settings.tagName || "Funscript",
-      minScore: Number(state.settings.minScore || 72),
+      minScore: Number(state.settings.minScore || 65),
       localFolders: String(state.settings.localFoldersText || "")
         .split(/\r?\n/)
         .map((line) => line.trim())

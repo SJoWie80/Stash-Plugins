@@ -23,6 +23,10 @@ STOP_TOKENS = {
     "mp4", "mkv", "avi", "wmv", "mov", "vr", "180", "360", "60fps", "fps", "com", "www",
     "scene", "scenes", "video", "videos", "part", "pt",
 }
+GENERIC_TITLE_TOKENS = {
+    "bath", "time", "tie", "love", "lover", "nurse", "patient", "amateur", "anal", "deeper", "sexy",
+    "white", "black", "girl", "girls", "boy", "boys", "big", "small", "hot", "teen", "mom", "step",
+}
 
 
 def read_input():
@@ -79,6 +83,55 @@ def score_text(needle, haystack):
     if needle_norm and needle_norm in haystack_norm:
         score = max(score, 95)
     return score
+
+
+def is_generic_short_match(candidate_tokens):
+    useful = [token for token in candidate_tokens if token not in GENERIC_TITLE_TOKENS]
+    return len(set(candidate_tokens)) <= 3 and len(useful) == 0
+
+
+def duration_score(scene, candidate):
+    scene_duration = float(scene.get("duration") or 0)
+    candidate_duration = float(candidate.get("duration") or 0)
+    if not scene_duration or not candidate_duration:
+        return 0
+    diff = abs(scene_duration - candidate_duration)
+    tolerance = max(20.0, scene_duration * 0.08)
+    if diff <= tolerance:
+        return 18
+    if diff <= max(45.0, scene_duration * 0.18):
+        return 8
+    return -25
+
+
+def metadata_bonus(scene, candidate_text):
+    bonus = 0
+    lowered = normalize(candidate_text)
+    studio = normalize(scene.get("studio") or "")
+    if studio and studio in lowered:
+        bonus += 10
+    for performer in scene.get("performers") or []:
+        performer_norm = normalize(performer)
+        if performer_norm and performer_norm in lowered:
+            bonus += 12
+    return min(24, bonus)
+
+
+def score_candidate(scene, query, candidate):
+    text = candidate.get("text") or candidate.get("title") or ""
+    base = score_text(query, text)
+    candidate_tokens = tokens(candidate.get("title") or text)
+    query_tokens = set(tokens(query))
+    overlap = set(candidate_tokens) & query_tokens
+    duration_adjustment = duration_score(scene, candidate)
+    meta_adjustment = metadata_bonus(scene, text)
+    if is_generic_short_match(candidate_tokens) and not duration_adjustment:
+        base = min(base, 55)
+    if len(overlap) <= 2 and len(query_tokens) >= 5 and not duration_adjustment and not meta_adjustment:
+        base = min(base, 58)
+    base += duration_adjustment
+    base += meta_adjustment
+    return max(0, min(100, int(base)))
 
 
 def scene_queries(scene):
@@ -328,6 +381,52 @@ def cached_github_tree(provider, branch):
     return cache[key]
 
 
+def github_candidates(provider, repo, branch, root_path, headers):
+    key = "{}@{}:{}".format(repo, branch, root_path)
+    cache = provider.setdefault("_candidateCache", {})
+    if key in cache:
+        return cache[key]
+
+    candidates = []
+    token_index = {}
+    tree = cached_github_tree(provider, branch)
+    for item in tree:
+        path = item.get("path") or ""
+        if item.get("type") != "blob" or not path.lower().endswith(".funscript"):
+            continue
+        if root_path and not (path == root_path or path.startswith(root_path + "/")):
+            continue
+        title = os.path.basename(path)
+        basename = os.path.splitext(title)[0]
+        text = "{} {}".format(basename, path.replace("/", " "))
+        candidate = {
+            "source": provider.get("name") or "GitHub",
+            "title": title,
+            "url": "https://raw.githubusercontent.com/{}/{}/{}".format(
+                repo,
+                urllib.parse.quote(branch, safe=""),
+                urllib.parse.quote(path, safe="/"),
+            ),
+            "pageUrl": "https://github.com/{}/blob/{}/{}".format(
+                repo,
+                urllib.parse.quote(branch, safe=""),
+                urllib.parse.quote(path, safe="/"),
+            ),
+            "repo": repo,
+            "branch": branch,
+            "path": path,
+            "headers": headers,
+            "text": text,
+            "tokens": set(tokens(text)),
+        }
+        index = len(candidates)
+        candidates.append(candidate)
+        for token in candidate["tokens"]:
+            token_index.setdefault(token, []).append(index)
+    cache[key] = {"candidates": candidates, "tokenIndex": token_index}
+    return cache[key]
+
+
 def find_github(scene, provider, min_score):
     if provider.get("_disabledError"):
         return None
@@ -344,16 +443,17 @@ def find_github(scene, provider, min_score):
     branches.extend(["main", "master"])
 
     last_error = None
-    tree = []
     used_branch = ""
+    candidate_data = None
     for candidate_branch in dict.fromkeys(branches):
         try:
-            tree = cached_github_tree(provider, candidate_branch)
+            cached_github_tree(provider, candidate_branch)
+            candidate_data = github_candidates(provider, repo, candidate_branch, root_path, headers)
             used_branch = candidate_branch
             break
         except Exception as exc:
             last_error = exc
-    if not tree:
+    if not candidate_data:
         return {
             "source": provider.get("name") or "GitHub",
             "error": "GitHub tree failed: {}".format(last_error),
@@ -361,37 +461,19 @@ def find_github(scene, provider, min_score):
         }
 
     best = None
-    for item in tree:
-        path = item.get("path") or ""
-        if item.get("type") != "blob" or not path.lower().endswith(".funscript"):
-            continue
-        if root_path and not (path == root_path or path.startswith(root_path + "/")):
-            continue
-        basename = os.path.splitext(os.path.basename(path))[0]
-        comparable = "{} {}".format(basename, path.replace("/", " "))
-        score = max(score_text(query, comparable) for query in queries)
+    candidate_indexes = set()
+    token_index = candidate_data["tokenIndex"]
+    for query in queries:
+        for token in tokens(query):
+            candidate_indexes.update(token_index.get(token, []))
+    for index in candidate_indexes:
+        candidate = candidate_data["candidates"][index]
+        score = max(score_candidate(scene, query, candidate) for query in queries)
         if score >= min_score and (not best or score > best["score"]):
-            raw_url = "https://raw.githubusercontent.com/{}/{}/{}".format(
-                repo,
-                urllib.parse.quote(used_branch, safe=""),
-                urllib.parse.quote(path, safe="/"),
-            )
-            page_url = "https://github.com/{}/blob/{}/{}".format(
-                repo,
-                urllib.parse.quote(used_branch, safe=""),
-                urllib.parse.quote(path, safe="/"),
-            )
-            best = {
-                "source": provider.get("name") or "GitHub",
-                "title": os.path.basename(path),
-                "score": score,
-                "url": raw_url,
-                "pageUrl": page_url,
-                "repo": repo,
-                "branch": used_branch,
-                "path": path,
-                "headers": headers,
-            }
+            best = dict(candidate)
+            best["score"] = score
+            best.pop("tokens", None)
+            best.pop("text", None)
     return best
 
 

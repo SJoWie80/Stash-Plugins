@@ -7,7 +7,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import cv2
 import numpy as np
@@ -52,10 +52,12 @@ class Job:
     updated_at: float = field(default_factory=time.time)
 
     def to_dict(self):
+        percent = int(max(0.0, min(1.0, self.progress)) * 100)
         return {
             "id": self.id,
             "status": self.status,
             "progress": round(self.progress, 3),
+            "progress_percent": percent,
             "current_file": self.current_file,
             "message": self.message,
             "results": self.results,
@@ -175,7 +177,13 @@ def turning_points(times: list[int], positions: list[int], min_gap_ms: int) -> l
     return deduped
 
 
-def generate_funscript(video_path: Path, sample_fps: float, sensitivity: float, min_gap_ms: int) -> dict[str, Any]:
+def generate_funscript(
+    video_path: Path,
+    sample_fps: float,
+    sensitivity: float,
+    min_gap_ms: int,
+    progress_callback: Callable[[float, str], None] | None = None,
+) -> dict[str, Any]:
     capture = cv2.VideoCapture(str(video_path))
     if not capture.isOpened():
         raise RuntimeError("Video could not be opened.")
@@ -190,6 +198,11 @@ def generate_funscript(video_path: Path, sample_fps: float, sensitivity: float, 
     centers: list[float] = []
     energies: list[float] = []
     frame_index = 0
+    last_progress_at = 0.0
+
+    def report(progress: float, message: str):
+        if progress_callback:
+            progress_callback(max(0.0, min(1.0, progress)), message)
 
     while True:
         ok, frame = capture.read()
@@ -219,7 +232,13 @@ def generate_funscript(video_path: Path, sample_fps: float, sensitivity: float, 
         previous_gray = gray
         frame_index += 1
 
+        now = time.time()
+        if frame_count and now - last_progress_at >= 1.0:
+            report(frame_index / frame_count, f"Analyzing frames {min(frame_index, frame_count):,}/{frame_count:,}")
+            last_progress_at = now
+
     capture.release()
+    report(1.0, "Building action points")
 
     if len(centers) < 4:
         return {"version": "1.0", "inverted": False, "range": 90, "actions": []}
@@ -280,7 +299,18 @@ def worker_loop():
                     job.results.append({"video": str(video_path), "output": str(output_path), "status": "skipped", "message": "Output already exists"})
                     continue
 
-                funscript = generate_funscript(video_path, job.request.sample_fps, job.request.sensitivity, job.request.min_gap_ms)
+                def update_file_progress(file_progress: float, message: str):
+                    job.progress = ((index - 1) + file_progress) / total
+                    job.message = f"{message} - {video_path.name}"
+                    job.updated_at = time.time()
+
+                funscript = generate_funscript(
+                    video_path,
+                    job.request.sample_fps,
+                    job.request.sensitivity,
+                    job.request.min_gap_ms,
+                    update_file_progress,
+                )
                 output_path.write_text(json.dumps(funscript, indent=2), encoding="utf-8")
                 job.results.append(
                     {
@@ -387,6 +417,8 @@ HTML = r"""<!doctype html>
     .results-list { display:grid; gap:8px; }
     .result { display:grid; gap:3px; padding:8px 10px; border:1px solid #2d343a; border-radius:6px; background:#171b1f; }
     .result strong { color:var(--text); font-size:13px; }
+    .progress-row { display:grid; grid-template-columns:minmax(0, 1fr) 64px; gap:12px; align-items:center; }
+    .progress-percent { color:var(--accent); font-size:18px; font-weight:700; text-align:right; }
     .hint { color:var(--warn); font-size:13px; line-height:1.4; }
     @media (max-width: 780px) {
       main { grid-template-columns:1fr; }
@@ -454,7 +486,10 @@ HTML = r"""<!doctype html>
       <div class="panel">
         <div class="panel-head"><strong>Job</strong><span class="path" id="jobId"></span></div>
         <div class="status">
-          <progress id="progress" max="1" value="0"></progress>
+          <div class="progress-row">
+            <progress id="progress" max="1" value="0"></progress>
+            <div class="progress-percent" id="progressPercent">0%</div>
+          </div>
           <div class="job-grid">
             <div class="job-label">Status</div>
             <div class="job-value" id="jobStatus">No job running.</div>
@@ -530,6 +565,7 @@ HTML = r"""<!doctype html>
       if (!state.job) return;
       const job = await api(`/api/jobs/${state.job}`);
       $("progress").value = job.progress;
+      $("progressPercent").textContent = `${job.progress_percent ?? Math.round((job.progress || 0) * 100)}%`;
       const fileName = job.current_file ? job.current_file.split(/[\\/]/).pop() : "-";
       $("jobStatus").textContent = job.error ? `${job.status}: ${job.error}` : job.status;
       $("jobFile").textContent = fileName;

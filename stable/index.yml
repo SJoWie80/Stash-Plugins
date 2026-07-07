@@ -37,13 +37,3 @@
   metadata:
     description: Generate or import consistent icon artwork and assign it to Stash tags.
     url: https://github.com/SJoWie80/Stash-Plugins
-
-- id: funscript-scraper
-  name: Funscript Scraper
-  version: 0.1.9
-  date: 2026-07-07 12:36:00
-  path: packages/funscript-scraper-v0.1.9.zip
-  sha256: a3312af62e4e137f76ee7752f2dc182b2db5eae2ba22f857f521770fbce99b0a
-  metadata:
-    description: Search, download, place, and tag funscripts for Stash scenes.
-    url: https://github.com/SJoWie80/Stash-Plugins

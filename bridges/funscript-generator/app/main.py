@@ -367,10 +367,11 @@ HTML = r"""<!doctype html>
     .roots, .toolbar, .settings { display:grid; gap:10px; margin-bottom:16px; }
     .root-list { display:flex; flex-wrap:wrap; gap:8px; }
     .root-list button { padding:6px 9px; font-size:13px; }
-    .entry { display:grid; grid-template-columns:28px 1fr auto; align-items:center; gap:8px; padding:8px; border-bottom:1px solid #252a2f; }
+    .entry { display:grid; grid-template-columns:72px minmax(0, 1fr) 34px; align-items:center; gap:10px; min-height:42px; padding:8px 10px; border-bottom:1px solid #252a2f; }
     .entry:hover { background:#1f2429; }
     .entry input { width:18px; height:18px; }
     .entry-name { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .type-badge { color:#c5d7e8; font-size:12px; line-height:1; background:#26313a; border:1px solid #3a4650; border-radius:999px; padding:5px 8px; text-align:center; }
     label { display:grid; gap:6px; color:var(--muted); font-size:13px; }
     input[type="number"], select { width:100%; border:1px solid var(--line); background:#101214; color:var(--text); border-radius:6px; padding:9px 10px; }
     .actions { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin:14px 0; }
@@ -379,11 +380,18 @@ HTML = r"""<!doctype html>
     .selected { display:grid; gap:8px; padding:12px 14px; max-height:220px; overflow:auto; }
     .selected div, .result { color:var(--muted); font-size:13px; overflow-wrap:anywhere; }
     progress { width:100%; height:14px; accent-color:var(--accent); }
-    .status { display:grid; gap:10px; padding:14px; }
+    .status { display:grid; gap:12px; padding:14px; }
+    .job-grid { display:grid; grid-template-columns:120px minmax(0, 1fr); gap:8px 12px; align-items:start; }
+    .job-label { color:var(--muted); font-size:12px; text-transform:uppercase; }
+    .job-value { color:#c5d7e8; font-size:14px; overflow-wrap:anywhere; }
+    .results-list { display:grid; gap:8px; }
+    .result { display:grid; gap:3px; padding:8px 10px; border:1px solid #2d343a; border-radius:6px; background:#171b1f; }
+    .result strong { color:var(--text); font-size:13px; }
     .hint { color:var(--warn); font-size:13px; line-height:1.4; }
     @media (max-width: 780px) {
       main { grid-template-columns:1fr; }
       aside { border-right:0; border-bottom:1px solid var(--line); }
+      .job-grid { grid-template-columns:1fr; }
     }
   </style>
 </head>
@@ -447,8 +455,15 @@ HTML = r"""<!doctype html>
         <div class="panel-head"><strong>Job</strong><span class="path" id="jobId"></span></div>
         <div class="status">
           <progress id="progress" max="1" value="0"></progress>
-          <div class="path" id="jobMessage">No job running.</div>
-          <div id="results"></div>
+          <div class="job-grid">
+            <div class="job-label">Status</div>
+            <div class="job-value" id="jobStatus">No job running.</div>
+            <div class="job-label">Current file</div>
+            <div class="job-value" id="jobFile">-</div>
+            <div class="job-label">Worker</div>
+            <div class="job-value" id="jobWorker">Idle</div>
+          </div>
+          <div class="results-list" id="results"></div>
         </div>
       </div>
     </section>
@@ -456,6 +471,7 @@ HTML = r"""<!doctype html>
   <script>
     const state = { path: null, parent: null, roots: [], selected: new Set(), job: null };
     const $ = (id) => document.getElementById(id);
+    const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, char => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", "\"":"&quot;", "'":"&#39;" }[char]));
 
     async function api(path, options) {
       const response = await fetch(path, options);
@@ -465,7 +481,7 @@ HTML = r"""<!doctype html>
 
     function renderSelected() {
       $("selectedCount").textContent = `${state.selected.size} selected`;
-      $("selected").innerHTML = [...state.selected].map(path => `<div>${path}</div>`).join("") || `<div>No videos selected.</div>`;
+      $("selected").innerHTML = [...state.selected].map(path => `<div>${escapeHtml(path)}</div>`).join("") || `<div>No videos selected.</div>`;
       $("generateButton").disabled = state.selected.size === 0;
     }
 
@@ -477,14 +493,15 @@ HTML = r"""<!doctype html>
       state.roots = data.roots;
       $("currentPath").textContent = data.path || "No mounted media roots found";
       $("upButton").disabled = !data.parent;
-      $("roots").innerHTML = data.roots.map(root => `<button data-root="${root}">${root}</button>`).join("");
+      $("roots").innerHTML = data.roots.map(root => `<button data-root="${escapeHtml(root)}">${escapeHtml(root)}</button>`).join("");
       $("count").textContent = `${data.entries.length} items`;
       $("entries").innerHTML = data.entries.map(entry => {
         const icon = entry.type === "folder" ? "Folder" : "Video";
         const checked = state.selected.has(entry.path) ? "checked" : "";
-        const control = entry.type === "video" ? `<input type="checkbox" data-video="${entry.path}" ${checked}>` : "";
-        const open = entry.type === "folder" ? `data-folder="${entry.path}"` : "";
-        return `<div class="entry" ${open}><span>${icon}</span><span class="entry-name">${entry.name}</span><span>${control}</span></div>`;
+        const safePath = escapeHtml(entry.path);
+        const control = entry.type === "video" ? `<input type="checkbox" data-video="${safePath}" ${checked}>` : "";
+        const open = entry.type === "folder" ? `data-folder="${safePath}"` : "";
+        return `<div class="entry" ${open}><span class="type-badge">${icon}</span><span class="entry-name" title="${escapeHtml(entry.path)}">${escapeHtml(entry.name)}</span><span>${control}</span></div>`;
       }).join("");
       renderSelected();
     }
@@ -513,8 +530,16 @@ HTML = r"""<!doctype html>
       if (!state.job) return;
       const job = await api(`/api/jobs/${state.job}`);
       $("progress").value = job.progress;
-      $("jobMessage").textContent = `${job.status}: ${job.message}${job.current_file ? " - " + job.current_file : ""}${job.error ? " - " + job.error : ""}`;
-      $("results").innerHTML = job.results.map(result => `<div class="result">${result.status}: ${result.output || result.video} ${result.actions !== undefined ? `(${result.actions} actions)` : ""}</div>`).join("");
+      const fileName = job.current_file ? job.current_file.split(/[\\/]/).pop() : "-";
+      $("jobStatus").textContent = job.error ? `${job.status}: ${job.error}` : job.status;
+      $("jobFile").textContent = fileName;
+      $("jobWorker").textContent = job.message || "Idle";
+      $("results").innerHTML = job.results.map(result => {
+        const name = (result.video || result.output || "").split(/[\\/]/).pop();
+        const detail = result.output || result.video || "";
+        const actionText = result.actions !== undefined ? `${result.actions} actions` : (result.message || "");
+        return `<div class="result"><strong>${escapeHtml(result.status)}: ${escapeHtml(name)}</strong><span class="path">${escapeHtml(detail)}</span><span class="path">${escapeHtml(actionText)}</span></div>`;
+      }).join("");
       if (job.status === "queued" || job.status === "running") setTimeout(pollJob, 1200);
     }
 

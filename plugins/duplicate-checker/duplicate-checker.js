@@ -7,6 +7,10 @@
   const APP_ID = "stash-duplicate-checker-root";
   const PAGE_SIZE = 250;
   const MAX_PAGES = 200;
+  const CLEANUP_ICON =
+    '<svg aria-hidden="true" focusable="false" class="svg-inline--fa fa-icon nav-menu-icon d-block d-xl-inline mb-2 mb-xl-0 stash-dc-nav-icon" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' +
+    '<path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M3 21h12M5 21v-5.5m8 5.5v-5.5M4.5 15.5h10M9 3l6 6m-7.5 4.5 9-9a2.1 2.1 0 0 1 3 3l-9 9m-3-3 3 3M16 3.5l4.5 4.5M18.5 14l.6 1.7L21 16.3l-1.9.6-.6 1.8-.6-1.8-1.9-.6 1.9-.6.6-1.7Z"/>' +
+    "</svg>";
 
   const state = {
     routeRegistered: false,
@@ -69,7 +73,7 @@
   }
 
   function findNav() {
-    const preferred = document.querySelector(".navbar-collapse .navbar-nav");
+    const preferred = document.querySelector("nav .navbar-nav") || document.querySelector(".navbar-collapse .navbar-nav");
     if (preferred) return preferred;
     const labels = ["Scenes", "Images", "Groups", "Markers", "Performers", "Studios", "Tags"];
     return Array.from(document.querySelectorAll("nav, header, .navbar, .navbar-nav, .btn-toolbar, div")).find((node) => {
@@ -85,14 +89,18 @@
         return;
       }
       const nav = findNav();
-      if (!nav) return;
+      const scenesLink = document.querySelector('a[href="/scenes"]') || document.querySelector('a[href="/scenes/"]');
+      if (!nav || !scenesLink) return;
       const wrap = el("div", "stash-dc-nav-wrap");
       wrap.id = NAV_ID;
-      const link = el("a", "nav-link stash-dc-nav-button");
+      wrap.className = scenesLink.parentElement ? scenesLink.parentElement.className : "nav-item";
+      const link = el("a", "");
       link.href = ROUTE;
+      link.id = "stash-dc-nav-button";
+      link.title = "Stash Cleanup";
       link.setAttribute("aria-label", "Stash Cleanup");
-      link.appendChild(el("span", "fa fa-broom fas fa-broom stash-dc-nav-icon"));
-      link.appendChild(el("span", "stash-dc-nav-text", "Cleanup"));
+      link.className = `${scenesLink.className.replace(/\bactive\b/g, "").trim()} stash-dc-nav-button`.trim();
+      link.innerHTML = `${CLEANUP_ICON}<span>Cleanup</span>`;
       link.addEventListener("click", navigate);
       wrap.appendChild(link);
       nav.appendChild(wrap);
@@ -875,6 +883,9 @@
 
   const observer = new MutationObserver(addNav);
   observer.observe(document.documentElement, { childList: true, subtree: true });
+  if (window.PluginApi && window.PluginApi.Event && window.PluginApi.Event.addEventListener) {
+    window.PluginApi.Event.addEventListener("stash:location", addNav);
+  }
   window.addEventListener("popstate", render);
   window.addEventListener("stash-duplicate-checker-route", render);
   if (document.readyState === "loading") {

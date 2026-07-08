@@ -1,24 +1,5 @@
-.stash-dc-nav-wrap {
-  display: inline-flex;
-}
-
-.stash-dc-nav-button {
-  align-items: center;
-  color: inherit;
-  display: inline-flex;
-  gap: 0.4rem;
-  white-space: nowrap;
-}
-
-.stash-dc-nav-button:hover,
-.stash-dc-nav-button:focus {
-  color: #fff;
-  text-decoration: none;
-}
-
 .stash-dc-nav-icon {
-  font-size: 0.95rem;
-  opacity: 0.88;
+  color: currentColor;
 }
 
 .stash-dc-launcher {
@@ -127,8 +108,7 @@
 }
 
 .stash-dc-tool[aria-pressed="true"],
-.stash-dc-tab[aria-pressed="true"],
-.stash-dc-nav-button.active {
+.stash-dc-tab[aria-pressed="true"] {
   background: #4f645a;
   border-color: rgba(255, 255, 255, 0.22);
 }

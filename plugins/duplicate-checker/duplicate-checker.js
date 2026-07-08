@@ -5,6 +5,7 @@
   const NAV_ID = "stash-duplicate-checker-nav";
   const LAUNCHER_ID = "stash-duplicate-checker-launcher";
   const APP_ID = "stash-duplicate-checker-root";
+  const MERGE_LOG_KEY = "stash-cleanup-merge-log-v1";
   const PAGE_SIZE = 250;
   const MAX_PAGES = 200;
   const CLEANUP_ICON =
@@ -23,6 +24,7 @@
     allTags: [],
     unusedTags: [],
     tagReviewGroups: [],
+    mergeLog: [],
     selectedTagIds: new Set(),
     tagMergeSelections: new Map(),
     protectedTagIds: new Set(),
@@ -55,6 +57,37 @@
 
   function clear(node) {
     while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  function loadMergeLog() {
+    try {
+      const items = JSON.parse(window.localStorage.getItem(MERGE_LOG_KEY) || "[]");
+      state.mergeLog = Array.isArray(items) ? items.slice(0, 100) : [];
+    } catch (error) {
+      state.mergeLog = [];
+      console.warn("[Stash Cleanup] merge log could not be loaded", error);
+    }
+  }
+
+  function saveMergeLog() {
+    try {
+      window.localStorage.setItem(MERGE_LOG_KEY, JSON.stringify(state.mergeLog.slice(0, 100)));
+    } catch (error) {
+      console.warn("[Stash Cleanup] merge log could not be saved", error);
+    }
+  }
+
+  function addMergeLogEntry(entry) {
+    state.mergeLog = [{ id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, createdAt: new Date().toISOString(), ...entry }, ...state.mergeLog].slice(0, 100);
+    saveMergeLog();
+  }
+
+  function clearMergeLog() {
+    if (!state.mergeLog.length) return;
+    if (!window.confirm(`Clear ${state.mergeLog.length} merge log entries?`)) return;
+    state.mergeLog = [];
+    saveMergeLog();
+    render();
   }
 
   function isRoute() {
@@ -894,6 +927,18 @@
         }
       }
       const failedDeletes = await destroyMergedTags(sourceTags);
+      addMergeLogEntry({
+        keep: { id: keep.id, name: tagName(keep) },
+        merged: sourceTags.map((tag) => ({ id: tag.id, name: tagName(tag), uses: tagUsageCount(tag) })),
+        deleted: sourceTags.length - failedDeletes.length,
+        failedDeletes: failedDeletes.map((entry) => ({ id: entry.tag.id, name: tagName(entry.tag), message: entry.message })),
+        updates: results.map((result) => ({
+          target: result.target.label,
+          updated: result.updated || 0,
+          skipped: Boolean(result.skipped),
+          message: result.message || "",
+        })),
+      });
       state.tagReviewLoaded = false;
       await loadTagReview(true);
       const updated = results.filter((result) => !result.skipped && result.updated).map((result) => `${result.updated} ${result.target.label}`).join(", ");
@@ -989,6 +1034,7 @@
       ["duplicates", "Duplicates"],
       ["tags", "Unused Tags"],
       ["tag-review", "Tag Review"],
+      ["merge-log", "Merge Log"],
     ].forEach(([tool, label]) => {
       const button = el("button", "stash-dc-tool", label);
       button.type = "button";
@@ -1023,15 +1069,26 @@
     const search = el("input", "stash-dc-search");
     search.type = "search";
     search.placeholder =
-      state.tool === "tags" ? "Search unused tags" : state.tool === "tag-review" ? "Search tag suggestions" : "Search titles, paths, performers, tags";
+      state.tool === "tags"
+        ? "Search unused tags"
+        : state.tool === "tag-review"
+          ? "Search tag suggestions"
+          : state.tool === "merge-log"
+            ? "Search merge log"
+            : "Search titles, paths, performers, tags";
     search.value = state.search;
     search.addEventListener("input", () => {
       state.search = search.value;
       render();
     });
 
-    const refresh = el("button", "stash-dc-refresh", state.tool === "tags" ? "Scan Tags" : state.tool === "tag-review" ? "Review Tags" : "Scan");
+    const refresh = el(
+      "button",
+      state.tool === "merge-log" ? "stash-dc-danger" : "stash-dc-refresh",
+      state.tool === "tags" ? "Scan Tags" : state.tool === "tag-review" ? "Review Tags" : state.tool === "merge-log" ? "Clear Log" : "Scan"
+    );
     refresh.type = "button";
+    refresh.disabled = state.tool === "merge-log" && !state.mergeLog.length;
     refresh.addEventListener("click", () => {
       if (state.tool === "tags") {
         state.tagsLoaded = false;
@@ -1041,6 +1098,8 @@
         state.tagReviewLoaded = false;
         state.tagReviewScanRequested = true;
         loadTagReview(true);
+      } else if (state.tool === "merge-log") {
+        clearMergeLog();
       } else {
         state.loaded = false;
         state.scanRequested = true;
@@ -1059,6 +1118,57 @@
     return state.tagReviewGroups.filter((group) =>
       [group.type, group.reason, ...group.tags.map(tagSearchText)].join(" ").toLowerCase().includes(term)
     );
+  }
+
+  function filteredMergeLog() {
+    const term = state.search.trim().toLowerCase();
+    if (!term) return state.mergeLog;
+    return state.mergeLog.filter((entry) =>
+      [
+        entry.keep && entry.keep.name,
+        entry.keep && entry.keep.id,
+        ...(entry.merged || []).flatMap((tag) => [tag.name, tag.id]),
+        ...(entry.updates || []).flatMap((update) => [update.target, update.updated, update.message]),
+        ...(entry.failedDeletes || []).flatMap((tag) => [tag.name, tag.id, tag.message]),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(term)
+    );
+  }
+
+  function formatLogDate(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value || "";
+    return date.toLocaleString();
+  }
+
+  function renderMergeLogEntry(entry) {
+    const item = el("section", "stash-dc-log-entry");
+    const header = el("div", "stash-dc-group-header");
+    header.appendChild(el("h2", "", (entry.keep && entry.keep.name) || "Unknown keep tag"));
+    header.appendChild(el("span", "stash-dc-badge", `${(entry.merged || []).length} merged`));
+    header.appendChild(el("span", "stash-dc-type", formatLogDate(entry.createdAt)));
+    item.appendChild(header);
+
+    const merged = (entry.merged || []).map((tag) => `${tag.name || `Tag ${tag.id}`} (${tag.uses || 0})`).join(", ");
+    item.appendChild(el("div", "stash-dc-key", `Kept tag ID ${(entry.keep && entry.keep.id) || "?"}; merged: ${merged || "none"}`));
+
+    const chips = el("div", "stash-dc-log-chips");
+    (entry.updates || []).forEach((update) => {
+      const label = update.skipped ? `${update.target}: skipped` : `${update.target}: ${update.updated}`;
+      chips.appendChild(el("span", update.skipped ? "stash-dc-chip stash-dc-chip-muted" : "stash-dc-chip", label));
+    });
+    chips.appendChild(el("span", "stash-dc-chip", `deleted: ${entry.deleted || 0}`));
+    if ((entry.failedDeletes || []).length) chips.appendChild(el("span", "stash-dc-chip stash-dc-chip-warn", `delete failed: ${entry.failedDeletes.length}`));
+    item.appendChild(chips);
+
+    if ((entry.failedDeletes || []).length) {
+      const failed = (entry.failedDeletes || []).map((tag) => `${tag.name || `Tag ${tag.id}`}: ${tag.message || "failed"}`).join("; ");
+      item.appendChild(el("div", "stash-dc-error", failed));
+    }
+    return item;
   }
 
   function renderTagReviewGroup(group, index) {
@@ -1265,12 +1375,23 @@
     shell.appendChild(list);
   }
 
+  function renderMergeLogResults(shell) {
+    const entries = filteredMergeLog();
+    if (!entries.length) {
+      shell.appendChild(el("div", "stash-dc-empty", state.mergeLog.length ? "No merge log entries match your search." : "No tag merges logged yet."));
+      return;
+    }
+    const list = el("div", "stash-dc-log-list");
+    entries.forEach((entry) => list.appendChild(renderMergeLogEntry(entry)));
+    shell.appendChild(list);
+  }
+
   function renderInto(container) {
     container.className = "stash-dc-app";
     clear(container);
     const shell = el("section", "stash-dc-shell");
     const titlebar = el("div", "stash-dc-titlebar");
-    titlebar.appendChild(el("h1", "", state.tool === "tags" ? "Unused Tags" : state.tool === "tag-review" ? "Tag Review" : "Stash Cleanup"));
+    titlebar.appendChild(el("h1", "", state.tool === "tags" ? "Unused Tags" : state.tool === "tag-review" ? "Tag Review" : state.tool === "merge-log" ? "Merge Log" : "Stash Cleanup"));
     titlebar.appendChild(
       el(
         "p",
@@ -1279,7 +1400,9 @@
           ? "Find tags that are not attached to any objects."
           : state.tool === "tag-review"
             ? "Review duplicate, noisy, and low-value tags, then merge only what you select."
-            : "Find scenes that share fingerprints or likely matching file properties."
+            : state.tool === "merge-log"
+              ? "See recent tag merges stored in this browser."
+              : "Find scenes that share fingerprints or likely matching file properties."
       )
     );
     shell.appendChild(titlebar);
@@ -1288,6 +1411,7 @@
     if (state.status) shell.appendChild(el("div", "stash-dc-status", state.status));
     if (state.tool === "tags") renderUnusedTagResults(shell);
     else if (state.tool === "tag-review") renderTagReviewResults(shell);
+    else if (state.tool === "merge-log") renderMergeLogResults(shell);
     else renderDuplicateResults(shell);
     container.appendChild(shell);
     if (state.tool === "tags" && state.tagScanRequested && !state.tagsLoaded && !state.loading && !state.error) loadUnusedTags(false);
@@ -1341,6 +1465,7 @@
   }
 
   function install() {
+    loadMergeLog();
     registerPluginRoute();
     patchHistory();
     addNav();

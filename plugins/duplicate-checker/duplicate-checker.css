@@ -69,7 +69,7 @@
 }
 
 .stash-dc-tools {
-  grid-template-columns: repeat(3, minmax(7rem, 1fr));
+  grid-template-columns: repeat(4, minmax(7rem, 1fr));
 }
 
 .stash-dc-tabs {
@@ -148,6 +148,11 @@
   gap: 1rem;
 }
 
+.stash-dc-log-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
 .stash-dc-group {
   background: #252932;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -156,6 +161,13 @@
 }
 
 .stash-dc-review-group {
+  background: #252932;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0.85rem;
+}
+
+.stash-dc-log-entry {
   background: #252932;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
@@ -185,6 +197,15 @@
   line-height: 1.25;
 }
 
+.stash-dc-chip-muted {
+  opacity: 0.62;
+}
+
+.stash-dc-chip-warn {
+  border-color: rgba(255, 190, 105, 0.35);
+  color: #ffd08a;
+}
+
 .stash-dc-badge,
 .stash-dc-type {
   font-size: 0.78rem;
@@ -196,6 +217,12 @@
   font-size: 0.8rem;
   margin-bottom: 0.75rem;
   overflow-wrap: anywhere;
+}
+
+.stash-dc-log-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
 }
 
 .stash-dc-scenes {

@@ -23,6 +23,8 @@
     search: "",
     loaded: false,
     tagsLoaded: false,
+    scanRequested: false,
+    tagScanRequested: false,
   };
 
   const HASH_FIELDS = ["checksum", "oshash", "phash"];
@@ -642,7 +644,8 @@
         if (state.mode === mode) return;
         state.mode = mode;
         state.loaded = false;
-        loadDuplicates(true);
+        state.scanRequested = false;
+        render();
       });
       tabs.appendChild(button);
     });
@@ -661,9 +664,11 @@
     refresh.addEventListener("click", () => {
       if (state.tool === "tags") {
         state.tagsLoaded = false;
+        state.tagScanRequested = true;
         loadUnusedTags(true);
       } else {
         state.loaded = false;
+        state.scanRequested = true;
         loadDuplicates(true);
       }
     });
@@ -757,7 +762,7 @@
     }
     const groups = filteredGroups();
     if (!groups.length) {
-      shell.appendChild(el("div", "stash-dc-empty", state.loaded ? "No duplicates found for the current scan." : "Run a scan to find duplicates."));
+      shell.appendChild(el("div", "stash-dc-empty", state.loaded ? "No duplicates found for the current scan." : "Choose a scan mode, then press Scan."));
       return;
     }
     const list = el("div", "stash-dc-groups");
@@ -772,7 +777,7 @@
     }
     const tags = filteredUnusedTags();
     if (!tags.length) {
-      shell.appendChild(el("div", "stash-dc-empty", state.tagsLoaded ? "No unused tags found." : "Run a tag scan to find unused tags."));
+      shell.appendChild(el("div", "stash-dc-empty", state.tagsLoaded ? "No unused tags found." : "Press Scan Tags to find unused tags."));
       return;
     }
     const actions = el("div", "stash-dc-tag-actions");
@@ -808,8 +813,8 @@
     if (state.tool === "tags") renderUnusedTagResults(shell);
     else renderDuplicateResults(shell);
     container.appendChild(shell);
-    if (state.tool === "tags" && !state.tagsLoaded && !state.loading && !state.error) loadUnusedTags(false);
-    if (state.tool === "duplicates" && !state.loaded && !state.loading && !state.error) loadDuplicates(false);
+    if (state.tool === "tags" && state.tagScanRequested && !state.tagsLoaded && !state.loading && !state.error) loadUnusedTags(false);
+    if (state.tool === "duplicates" && state.scanRequested && !state.loaded && !state.loading && !state.error) loadDuplicates(false);
   }
 
   function render() {

@@ -1368,11 +1368,13 @@
     const groups = filteredTagReviewGroups();
     if (!groups.length) {
       shell.appendChild(el("div", "stash-dc-empty", state.tagReviewLoaded ? "No tag cleanup suggestions found." : "Press Review Tags to generate safe suggestions."));
+      renderRecentMergeLog(shell);
       return;
     }
     const list = el("div", "stash-dc-review-groups");
     groups.forEach((group, index) => list.appendChild(renderTagReviewGroup(group, index)));
     shell.appendChild(list);
+    renderRecentMergeLog(shell);
   }
 
   function renderMergeLogResults(shell) {
@@ -1384,6 +1386,19 @@
     const list = el("div", "stash-dc-log-list");
     entries.forEach((entry) => list.appendChild(renderMergeLogEntry(entry)));
     shell.appendChild(list);
+  }
+
+  function renderRecentMergeLog(shell) {
+    if (!state.mergeLog.length) return;
+    const section = el("section", "stash-dc-recent-log");
+    const header = el("div", "stash-dc-group-header");
+    header.appendChild(el("h2", "", "Recent Merges"));
+    header.appendChild(el("span", "stash-dc-badge", `${state.mergeLog.length} logged`));
+    section.appendChild(header);
+    const list = el("div", "stash-dc-log-list");
+    state.mergeLog.slice(0, 3).forEach((entry) => list.appendChild(renderMergeLogEntry(entry)));
+    section.appendChild(list);
+    shell.appendChild(section);
   }
 
   function renderInto(container) {
@@ -1486,6 +1501,11 @@
   }
   window.addEventListener("popstate", render);
   window.addEventListener("stash-duplicate-checker-route", render);
+  window.addEventListener("storage", (event) => {
+    if (event.key !== MERGE_LOG_KEY) return;
+    loadMergeLog();
+    render();
+  });
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", install, { once: true });
   } else {

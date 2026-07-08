@@ -1,6 +1,6 @@
 name: Stash Cleanup
 description: Clean up duplicate scenes, unused tags, and messy metadata.
-version: 0.7.0
+version: 0.7.1
 url: https://github.com/SJoWie80/Stash-Plugins
 interface: raw
 ui:

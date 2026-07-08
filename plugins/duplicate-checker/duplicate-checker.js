@@ -20,15 +20,19 @@
     error: "",
     status: "",
     groups: [],
+    allTags: [],
     unusedTags: [],
+    tagReviewGroups: [],
     selectedTagIds: new Set(),
     protectedTagIds: new Set(),
     mode: "fingerprint",
     search: "",
     loaded: false,
     tagsLoaded: false,
+    tagReviewLoaded: false,
     scanRequested: false,
     tagScanRequested: false,
+    tagReviewScanRequested: false,
   };
 
   const HASH_FIELDS = ["checksum", "oshash", "phash"];
@@ -237,15 +241,17 @@
   }
 
   function buildTagQuery(tagFields) {
-    const countFields = ["scene_count", "gallery_count", "image_count", "performer_count", "studio_count", "marker_count"].filter((field) =>
+    const countFields = ["scene_count", "gallery_count", "image_count", "group_count", "performer_count", "studio_count", "marker_count"].filter((field) =>
       tagFields.has(field)
     );
+    const optionalFields = ["aliases"].filter((field) => tagFields.has(field));
     return `query DuplicateCheckerTags($filter: FindFilterType) {
       findTags(filter: $filter) {
         count
         tags {
           id name
           ${countFields.join("\n          ")}
+          ${optionalFields.join("\n          ")}
         }
       }
     }`;
@@ -459,7 +465,7 @@
   }
 
   function tagUsageCount(tag) {
-    return ["scene_count", "gallery_count", "image_count", "performer_count", "studio_count", "marker_count"].reduce(
+    return ["scene_count", "gallery_count", "image_count", "group_count", "performer_count", "studio_count", "marker_count"].reduce(
       (sum, field) => sum + (Number(tag && tag[field]) || 0),
       0
     );
@@ -473,7 +479,7 @@
     render();
     try {
       const tagFields = await graphqlTypeFields("Tag");
-      const usableFields = ["scene_count", "gallery_count", "image_count", "performer_count", "studio_count", "marker_count"].filter((field) =>
+      const usableFields = ["scene_count", "gallery_count", "image_count", "group_count", "performer_count", "studio_count", "marker_count"].filter((field) =>
         tagFields.has(field)
       );
       if (!usableFields.length) throw new Error("Tag count fields are not available in this Stash GraphQL schema.");
@@ -486,6 +492,157 @@
       state.error = error.message || String(error);
       state.status = "";
       console.error("[Stash Cleanup] tag scan failed", error);
+    } finally {
+      state.loading = false;
+      render();
+    }
+  }
+
+  function tagName(tag) {
+    return String((tag && tag.name) || "").trim();
+  }
+
+  function tagAliases(tag) {
+    return Array.isArray(tag && tag.aliases) ? tag.aliases.filter(Boolean) : [];
+  }
+
+  function tagSearchText(tag) {
+    return [tagName(tag), ...tagAliases(tag)].join(" ").toLowerCase();
+  }
+
+  function simplifiedTagName(name) {
+    return normalizeText(name)
+      .replace(/\b(female|male|woman|women|girl|girls|man|men|boy|boys)\b/g, "")
+      .replace(/\b(pussy|cunt|vagina|labia|genitals)\b/g, "genitals")
+      .replace(/\b(boobs|tits|breasts)\b/g, "breasts")
+      .replace(/\b(ass|butt|buttocks)\b/g, "ass")
+      .replace(/\bblowjobs\b/g, "blowjob")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function looseTagKey(name) {
+    return simplifiedTagName(name)
+      .replace(/\([^)]*\)/g, "")
+      .replace(/\bhd|4k|vr|pov\b/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function singularish(value) {
+    return String(value || "")
+      .split(" ")
+      .map((part) => (part.length > 4 && part.endsWith("s") ? part.slice(0, -1) : part))
+      .join(" ");
+  }
+
+  function tagScore(tag) {
+    return tagUsageCount(tag) * 10 + tagAliases(tag).length * 2 + Math.max(0, 40 - tagName(tag).length);
+  }
+
+  function bestTag(tags) {
+    return tags.slice().sort((a, b) => tagScore(b) - tagScore(a) || tagName(a).localeCompare(tagName(b)))[0];
+  }
+
+  function tagGroupSignature(tags) {
+    return tags.map((tag) => String(tag.id)).sort((a, b) => Number(a) - Number(b)).join(",");
+  }
+
+  function addTagReviewGroup(output, seen, type, reason, tags, confidence) {
+    const unique = Array.from(new Map(tags.filter(Boolean).map((tag) => [String(tag.id), tag])).values());
+    if (unique.length < 2) return;
+    const signature = tagGroupSignature(unique);
+    if (seen.has(signature)) return;
+    seen.add(signature);
+    const keep = bestTag(unique);
+    output.push({
+      type,
+      reason,
+      confidence,
+      keep,
+      tags: unique.sort((a, b) => tagUsageCount(b) - tagUsageCount(a) || tagName(a).localeCompare(tagName(b))),
+    });
+  }
+
+  function buildTagReviewGroups(tags) {
+    const groups = [];
+    const seen = new Set();
+    const byExact = new Map();
+    const byLoose = new Map();
+    const bySingular = new Map();
+
+    tags.forEach((tag) => {
+      const name = tagName(tag);
+      const exact = normalizeText(name);
+      const loose = looseTagKey(name);
+      const singular = singularish(loose);
+      if (exact) {
+        if (!byExact.has(exact)) byExact.set(exact, []);
+        byExact.get(exact).push(tag);
+      }
+      if (loose) {
+        if (!byLoose.has(loose)) byLoose.set(loose, []);
+        byLoose.get(loose).push(tag);
+      }
+      if (singular) {
+        if (!bySingular.has(singular)) bySingular.set(singular, []);
+        bySingular.get(singular).push(tag);
+      }
+    });
+
+    byExact.forEach((items) => addTagReviewGroup(groups, seen, "Duplicate name", "Same normalized name; usually safe to merge.", items, "High"));
+    bySingular.forEach((items) => addTagReviewGroup(groups, seen, "Plural/casing variant", "Only plural/casing/punctuation appears to differ.", items, "High"));
+    byLoose.forEach((items) => addTagReviewGroup(groups, seen, "Likely synonym", "Normalized common words look equivalent. Review before merging.", items, "Medium"));
+
+    const lowUse = tags
+      .filter((tag) => tagUsageCount(tag) > 0 && tagUsageCount(tag) <= 2)
+      .sort((a, b) => tagUsageCount(a) - tagUsageCount(b) || tagName(a).localeCompare(tagName(b)))
+      .slice(0, 80);
+    lowUse.forEach((tag) => {
+      const base = looseTagKey(tagName(tag));
+      const candidates = tags
+        .filter((other) => String(other.id) !== String(tag.id) && tagUsageCount(other) >= 10)
+        .filter((other) => {
+          const otherBase = looseTagKey(tagName(other));
+          return base && otherBase && (base.includes(otherBase) || otherBase.includes(base));
+        })
+        .slice(0, 4);
+      if (candidates.length) addTagReviewGroup(groups, seen, "Low-use narrow tag", "Rare tag overlaps with a busier tag. This may be noise or may be intentionally specific.", [tag, ...candidates], "Low");
+    });
+
+    const junk = tags.filter((tag) => {
+      const name = tagName(tag);
+      return /https?:|www\.|^\d+$|[_]{2,}|[?=&]/i.test(name) || name.length > 48 || tagUsageCount(tag) <= 1 && /[-_]{2,}|\bunknown\b|\bother\b/i.test(name);
+    });
+    junk.slice(0, 80).forEach((tag) => {
+      const candidates = tags.filter((other) => String(other.id) !== String(tag.id) && looseTagKey(tagName(other)) === looseTagKey(tagName(tag))).slice(0, 3);
+      addTagReviewGroup(groups, seen, "Possible junk tag", "Name looks imported, overly long, or low-value. Review before deleting or aliasing.", [tag, ...candidates], "Low");
+    });
+
+    return groups.sort((a, b) => {
+      const rank = { High: 0, Medium: 1, Low: 2 };
+      return rank[a.confidence] - rank[b.confidence] || tagUsageCount(b.keep) - tagUsageCount(a.keep) || a.type.localeCompare(b.type);
+    });
+  }
+
+  async function loadTagReview(force) {
+    if (state.tagReviewLoaded && !force) return;
+    state.loading = true;
+    state.error = "";
+    state.status = "Scanning tags for cleanup suggestions...";
+    render();
+    try {
+      const tagFields = await graphqlTypeFields("Tag");
+      const tags = await loadPagedTags(buildTagQuery(tagFields));
+      state.allTags = tags.sort((a, b) => tagName(a).localeCompare(tagName(b)));
+      state.tagReviewGroups = buildTagReviewGroups(state.allTags);
+      state.tagReviewLoaded = true;
+      const usedTags = tags.filter((tag) => tagUsageCount(tag) > 0).length;
+      state.status = `${state.tagReviewGroups.length} suggestion groups from ${tags.length} tags (${usedTags} used)`;
+    } catch (error) {
+      state.error = error.message || String(error);
+      state.status = "";
+      console.error("[Stash Cleanup] tag review scan failed", error);
     } finally {
       state.loading = false;
       render();
@@ -627,6 +784,7 @@
     [
       ["duplicates", "Duplicates"],
       ["tags", "Unused Tags"],
+      ["tag-review", "Tag Review"],
     ].forEach(([tool, label]) => {
       const button = el("button", "stash-dc-tool", label);
       button.type = "button";
@@ -660,20 +818,25 @@
 
     const search = el("input", "stash-dc-search");
     search.type = "search";
-    search.placeholder = state.tool === "tags" ? "Search unused tags" : "Search titles, paths, performers, tags";
+    search.placeholder =
+      state.tool === "tags" ? "Search unused tags" : state.tool === "tag-review" ? "Search tag suggestions" : "Search titles, paths, performers, tags";
     search.value = state.search;
     search.addEventListener("input", () => {
       state.search = search.value;
       render();
     });
 
-    const refresh = el("button", "stash-dc-refresh", state.tool === "tags" ? "Scan Tags" : "Scan");
+    const refresh = el("button", "stash-dc-refresh", state.tool === "tags" ? "Scan Tags" : state.tool === "tag-review" ? "Review Tags" : "Scan");
     refresh.type = "button";
     refresh.addEventListener("click", () => {
       if (state.tool === "tags") {
         state.tagsLoaded = false;
         state.tagScanRequested = true;
         loadUnusedTags(true);
+      } else if (state.tool === "tag-review") {
+        state.tagReviewLoaded = false;
+        state.tagReviewScanRequested = true;
+        loadTagReview(true);
       } else {
         state.loaded = false;
         state.scanRequested = true;
@@ -684,6 +847,46 @@
     if (state.tool === "duplicates") toolbar.append(tabs);
     toolbar.append(search, refresh);
     parent.appendChild(toolbar);
+  }
+
+  function filteredTagReviewGroups() {
+    const term = state.search.trim().toLowerCase();
+    if (!term) return state.tagReviewGroups;
+    return state.tagReviewGroups.filter((group) =>
+      [group.type, group.reason, ...group.tags.map(tagSearchText)].join(" ").toLowerCase().includes(term)
+    );
+  }
+
+  function renderTagReviewGroup(group, index) {
+    const section = el("section", "stash-dc-review-group");
+    const header = el("div", "stash-dc-group-header");
+    header.appendChild(el("h2", "", `${group.type} ${index + 1}`));
+    header.appendChild(el("span", "stash-dc-badge", group.confidence));
+    header.appendChild(el("span", "stash-dc-type", `${group.tags.length} tags`));
+    section.appendChild(header);
+    section.appendChild(el("div", "stash-dc-key", group.reason));
+
+    const keep = el("div", "stash-dc-review-keep");
+    keep.appendChild(el("span", "stash-dc-review-label", "Suggested keep"));
+    const keepButton = el("button", "stash-dc-review-tag is-keep", `${tagName(group.keep)} (${tagUsageCount(group.keep)})`);
+    keepButton.type = "button";
+    keepButton.addEventListener("click", () => openTag(group.keep));
+    keep.appendChild(keepButton);
+    section.appendChild(keep);
+
+    const list = el("div", "stash-dc-review-tags");
+    group.tags.forEach((tag) => {
+      const button = el("button", `stash-dc-review-tag ${String(tag.id) === String(group.keep.id) ? "is-keep" : ""}`);
+      button.type = "button";
+      button.addEventListener("click", () => openTag(tag));
+      button.appendChild(el("span", "stash-dc-review-name", tagName(tag)));
+      button.appendChild(el("span", "stash-dc-review-count", `${tagUsageCount(tag)} uses`));
+      const aliases = tagAliases(tag);
+      if (aliases.length) button.appendChild(el("span", "stash-dc-review-aliases", aliases.slice(0, 3).join(", ")));
+      list.appendChild(button);
+    });
+    section.appendChild(list);
+    return section;
   }
 
   function renderScene(scene) {
@@ -807,21 +1010,48 @@
     shell.appendChild(list);
   }
 
+  function renderTagReviewResults(shell) {
+    if (state.loading && !state.tagReviewGroups.length) {
+      shell.appendChild(el("div", "stash-dc-empty", "Scanning tags for suggestions..."));
+      return;
+    }
+    const groups = filteredTagReviewGroups();
+    if (!groups.length) {
+      shell.appendChild(el("div", "stash-dc-empty", state.tagReviewLoaded ? "No tag cleanup suggestions found." : "Press Review Tags to generate safe suggestions."));
+      return;
+    }
+    const list = el("div", "stash-dc-review-groups");
+    groups.forEach((group, index) => list.appendChild(renderTagReviewGroup(group, index)));
+    shell.appendChild(list);
+  }
+
   function renderInto(container) {
     container.className = "stash-dc-app";
     clear(container);
     const shell = el("section", "stash-dc-shell");
     const titlebar = el("div", "stash-dc-titlebar");
-    titlebar.appendChild(el("h1", "", state.tool === "tags" ? "Unused Tags" : "Stash Cleanup"));
-    titlebar.appendChild(el("p", "", state.tool === "tags" ? "Find tags that are not attached to any objects." : "Find scenes that share fingerprints or likely matching file properties."));
+    titlebar.appendChild(el("h1", "", state.tool === "tags" ? "Unused Tags" : state.tool === "tag-review" ? "Tag Review" : "Stash Cleanup"));
+    titlebar.appendChild(
+      el(
+        "p",
+        "",
+        state.tool === "tags"
+          ? "Find tags that are not attached to any objects."
+          : state.tool === "tag-review"
+            ? "Suggest duplicate, noisy, and low-value tags without changing anything."
+            : "Find scenes that share fingerprints or likely matching file properties."
+      )
+    );
     shell.appendChild(titlebar);
     renderToolbar(shell);
     if (state.error) shell.appendChild(el("div", "stash-dc-error", state.error));
     if (state.status) shell.appendChild(el("div", "stash-dc-status", state.status));
     if (state.tool === "tags") renderUnusedTagResults(shell);
+    else if (state.tool === "tag-review") renderTagReviewResults(shell);
     else renderDuplicateResults(shell);
     container.appendChild(shell);
     if (state.tool === "tags" && state.tagScanRequested && !state.tagsLoaded && !state.loading && !state.error) loadUnusedTags(false);
+    if (state.tool === "tag-review" && state.tagReviewScanRequested && !state.tagReviewLoaded && !state.loading && !state.error) loadTagReview(false);
     if (state.tool === "duplicates" && state.scanRequested && !state.loaded && !state.loading && !state.error) loadDuplicates(false);
   }
 

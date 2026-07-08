@@ -69,7 +69,7 @@
 }
 
 .stash-dc-tools {
-  grid-template-columns: repeat(2, minmax(7rem, 1fr));
+  grid-template-columns: repeat(3, minmax(7rem, 1fr));
 }
 
 .stash-dc-tabs {
@@ -143,7 +143,19 @@
   gap: 1rem;
 }
 
+.stash-dc-review-groups {
+  display: grid;
+  gap: 1rem;
+}
+
 .stash-dc-group {
+  background: #252932;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0.85rem;
+}
+
+.stash-dc-review-group {
   background: #252932;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
@@ -203,6 +215,62 @@
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-bottom: 0.75rem;
+}
+
+.stash-dc-review-keep {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.6rem 0;
+}
+
+.stash-dc-review-label {
+  color: #aeb6c2;
+  font-size: 0.8rem;
+}
+
+.stash-dc-review-tags {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+}
+
+.stash-dc-review-tag {
+  background: #1f232b;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 0.2rem;
+  min-height: 3.7rem;
+  padding: 0.5rem 0.65rem;
+  text-align: left;
+}
+
+.stash-dc-review-tag.is-keep {
+  border-color: rgba(105, 190, 135, 0.55);
+}
+
+.stash-dc-review-tag:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+}
+
+.stash-dc-review-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stash-dc-review-count,
+.stash-dc-review-aliases {
+  color: #8f9aaa;
+  font-size: 0.76rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .stash-dc-scene {

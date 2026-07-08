@@ -897,6 +897,54 @@
     return failed;
   }
 
+  function selectedMergePlans(groups) {
+    return groups
+      .map((group) => {
+        const selection = mergeSelectionFor(group);
+        const keep = group.tags.find((tag) => String(tag.id) === selection.keepId);
+        const sourceTags = group.tags.filter((tag) => selection.sourceIds.has(String(tag.id)) && String(tag.id) !== selection.keepId);
+        return keep && sourceTags.length ? { group, keep, sourceTags } : null;
+      })
+      .filter(Boolean);
+  }
+
+  async function runTagMergePlan(plan, prefix) {
+    const keep = plan.keep;
+    const sourceTags = plan.sourceTags;
+    state.status = `${prefix || "Preparing"} merge into "${tagName(keep)}"...`;
+    render();
+
+    const [queryFields, mutationFields] = await Promise.all([graphqlTypeFields("Query"), graphqlTypeFields("Mutation")]);
+    if (!mutationFields.has("tagDestroy")) throw new Error("tagDestroy mutation is not available in this Stash GraphQL schema.");
+    const keepId = String(keep.id);
+    const sourceIds = new Set(sourceTags.map((tag) => String(tag.id)));
+    const supportedTargets = TAG_MERGE_TARGETS.filter((target) => queryFields.has(target.query) && mutationFields.has(target.mutation));
+    const results = [];
+    for (let index = 0; index < supportedTargets.length; index += 1) {
+      const target = supportedTargets[index];
+      try {
+        results.push(await mergeTargetTags(target, keepId, sourceIds));
+      } catch (error) {
+        console.warn("[Stash Cleanup] tag merge target failed", target, error);
+        results.push({ target, updated: 0, skipped: true, message: error.message || String(error) });
+      }
+    }
+    const failedDeletes = await destroyMergedTags(sourceTags);
+    addMergeLogEntry({
+      keep: { id: keep.id, name: tagName(keep) },
+      merged: sourceTags.map((tag) => ({ id: tag.id, name: tagName(tag), uses: tagUsageCount(tag) })),
+      deleted: sourceTags.length - failedDeletes.length,
+      failedDeletes: failedDeletes.map((entry) => ({ id: entry.tag.id, name: tagName(entry.tag), message: entry.message })),
+      updates: results.map((result) => ({
+        target: result.target.label,
+        updated: result.updated || 0,
+        skipped: Boolean(result.skipped),
+        message: result.message || "",
+      })),
+    });
+    return { keep, sourceTags, results, failedDeletes };
+  }
+
   async function mergeTagReviewGroup(group) {
     const selection = mergeSelectionFor(group);
     const keep = group.tags.find((tag) => String(tag.id) === selection.keepId);
@@ -911,34 +959,7 @@
     state.status = `Preparing merge into "${tagName(keep)}"...`;
     render();
     try {
-      const [queryFields, mutationFields] = await Promise.all([graphqlTypeFields("Query"), graphqlTypeFields("Mutation")]);
-      if (!mutationFields.has("tagDestroy")) throw new Error("tagDestroy mutation is not available in this Stash GraphQL schema.");
-      const keepId = String(keep.id);
-      const sourceIds = new Set(sourceTags.map((tag) => String(tag.id)));
-      const supportedTargets = TAG_MERGE_TARGETS.filter((target) => queryFields.has(target.query) && mutationFields.has(target.mutation));
-      const results = [];
-      for (let index = 0; index < supportedTargets.length; index += 1) {
-        const target = supportedTargets[index];
-        try {
-          results.push(await mergeTargetTags(target, keepId, sourceIds));
-        } catch (error) {
-          console.warn("[Stash Cleanup] tag merge target failed", target, error);
-          results.push({ target, updated: 0, skipped: true, message: error.message || String(error) });
-        }
-      }
-      const failedDeletes = await destroyMergedTags(sourceTags);
-      addMergeLogEntry({
-        keep: { id: keep.id, name: tagName(keep) },
-        merged: sourceTags.map((tag) => ({ id: tag.id, name: tagName(tag), uses: tagUsageCount(tag) })),
-        deleted: sourceTags.length - failedDeletes.length,
-        failedDeletes: failedDeletes.map((entry) => ({ id: entry.tag.id, name: tagName(entry.tag), message: entry.message })),
-        updates: results.map((result) => ({
-          target: result.target.label,
-          updated: result.updated || 0,
-          skipped: Boolean(result.skipped),
-          message: result.message || "",
-        })),
-      });
+      const { results, failedDeletes } = await runTagMergePlan({ keep, sourceTags });
       state.tagReviewLoaded = false;
       await loadTagReview(true);
       const updated = results.filter((result) => !result.skipped && result.updated).map((result) => `${result.updated} ${result.target.label}`).join(", ");
@@ -952,6 +973,49 @@
       state.error = error.message || String(error);
       state.status = "";
       console.error("[Stash Cleanup] tag merge failed", error);
+    } finally {
+      state.loading = false;
+      render();
+    }
+  }
+
+  async function mergeAllSelectedTagReviewGroups() {
+    const plans = selectedMergePlans(state.tagReviewGroups);
+    if (!plans.length) return;
+    const totalTags = plans.reduce((sum, plan) => sum + plan.sourceTags.length, 0);
+    const preview = plans.slice(0, 8).map((plan) => `${plan.sourceTags.length} into "${tagName(plan.keep)}"`).join("\n");
+    const extra = plans.length > 8 ? `\n...and ${plans.length - 8} more groups` : "";
+    if (!window.confirm(`Merge ${totalTags} selected tags across ${plans.length} groups?\n\n${preview}${extra}\n\nThis runs each group one by one and logs every merge.`)) return;
+
+    state.loading = true;
+    state.error = "";
+    render();
+    const failures = [];
+    let mergedTags = 0;
+    try {
+      for (let index = 0; index < plans.length; index += 1) {
+        const plan = plans[index];
+        try {
+          const result = await runTagMergePlan(plan, `Group ${index + 1} of ${plans.length}: preparing`);
+          mergedTags += result.sourceTags.length - result.failedDeletes.length;
+          if (result.failedDeletes.length) failures.push(...result.failedDeletes.map((entry) => ({ keep: plan.keep, tag: entry.tag, message: entry.message })));
+        } catch (error) {
+          failures.push({ keep: plan.keep, message: error.message || String(error) });
+          console.error("[Stash Cleanup] batch tag merge failed", plan, error);
+        }
+      }
+      state.tagReviewLoaded = false;
+      await loadTagReview(true);
+      state.status = `Batch merge complete: ${mergedTags} tags merged across ${plans.length} groups`;
+      if (failures.length) {
+        const names = failures.slice(0, 6).map((entry) => (entry.tag ? tagName(entry.tag) : tagName(entry.keep))).join(", ");
+        const extra = failures.length > 6 ? ` and ${failures.length - 6} more` : "";
+        state.error = `${failures.length} merge items had errors: ${names}${extra}`;
+      }
+    } catch (error) {
+      state.error = error.message || String(error);
+      state.status = "";
+      console.error("[Stash Cleanup] batch tag merge failed", error);
     } finally {
       state.loading = false;
       render();
@@ -1366,6 +1430,18 @@
       return;
     }
     const groups = filteredTagReviewGroups();
+    const plans = selectedMergePlans(state.tagReviewGroups);
+    const selectedTags = plans.reduce((sum, plan) => sum + plan.sourceTags.length, 0);
+    if (state.tagReviewLoaded || state.tagReviewGroups.length) {
+      const actions = el("div", "stash-dc-batch-actions");
+      const summary = el("span", "stash-dc-review-label", selectedTags ? `${selectedTags} tags selected in ${plans.length} groups` : "Select merge tags in one or more groups");
+      const mergeAll = el("button", "stash-dc-danger", `Merge All Selected (${selectedTags})`);
+      mergeAll.type = "button";
+      mergeAll.disabled = !selectedTags || state.loading;
+      mergeAll.addEventListener("click", mergeAllSelectedTagReviewGroups);
+      actions.append(summary, mergeAll);
+      shell.appendChild(actions);
+    }
     if (!groups.length) {
       shell.appendChild(el("div", "stash-dc-empty", state.tagReviewLoaded ? "No tag cleanup suggestions found." : "Press Review Tags to generate safe suggestions."));
       renderRecentMergeLog(shell);

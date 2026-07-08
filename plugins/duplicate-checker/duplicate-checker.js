@@ -11,13 +11,16 @@
   const state = {
     routeRegistered: false,
     routeContainer: null,
+    tool: "duplicates",
     loading: false,
     error: "",
     status: "",
     groups: [],
+    unusedTags: [],
     mode: "fingerprint",
     search: "",
     loaded: false,
+    tagsLoaded: false,
   };
 
   const HASH_FIELDS = ["checksum", "oshash", "phash"];
@@ -150,6 +153,22 @@
     return scenes;
   }
 
+  async function loadPagedTags(query) {
+    const tags = [];
+    let total = 0;
+    for (let page = 1; page <= MAX_PAGES; page += 1) {
+      state.status = `Scanning tags page ${page}...`;
+      render();
+      const data = await graphql(query, { filter: { page, per_page: PAGE_SIZE } });
+      const result = data && data.findTags;
+      const items = (result && result.tags) || [];
+      total = result && typeof result.count === "number" ? result.count : tags.length + items.length;
+      tags.push(...items);
+      if (!items.length || tags.length >= total || items.length < PAGE_SIZE) break;
+    }
+    return tags;
+  }
+
   async function graphqlTypeFields(typeName) {
     const data = await graphql(
       `query DuplicateCheckerTypeFields($name: String!) {
@@ -200,6 +219,21 @@
           studio { name }
           performers { name }
           tags { name }
+        }
+      }
+    }`;
+  }
+
+  function buildTagQuery(tagFields) {
+    const countFields = ["scene_count", "gallery_count", "image_count", "performer_count", "studio_count", "marker_count"].filter((field) =>
+      tagFields.has(field)
+    );
+    return `query DuplicateCheckerTags($filter: FindFilterType) {
+      findTags(filter: $filter) {
+        count
+        tags {
+          id name
+          ${countFields.join("\n          ")}
         }
       }
     }`;
@@ -412,6 +446,39 @@
     }
   }
 
+  function tagUsageCount(tag) {
+    return ["scene_count", "gallery_count", "image_count", "performer_count", "studio_count", "marker_count"].reduce(
+      (sum, field) => sum + (Number(tag && tag[field]) || 0),
+      0
+    );
+  }
+
+  async function loadUnusedTags(force) {
+    if (state.tagsLoaded && !force) return;
+    state.loading = true;
+    state.error = "";
+    state.status = "Scanning tags...";
+    render();
+    try {
+      const tagFields = await graphqlTypeFields("Tag");
+      const usableFields = ["scene_count", "gallery_count", "image_count", "performer_count", "studio_count", "marker_count"].filter((field) =>
+        tagFields.has(field)
+      );
+      if (!usableFields.length) throw new Error("Tag count fields are not available in this Stash GraphQL schema.");
+      const tags = await loadPagedTags(buildTagQuery(tagFields));
+      state.unusedTags = tags.filter((tag) => tagUsageCount(tag) === 0).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      state.tagsLoaded = true;
+      state.status = `${state.unusedTags.length} unused tags from ${tags.length} scanned tags`;
+    } catch (error) {
+      state.error = error.message || String(error);
+      state.status = "";
+      console.error("[Duplicate Checker] tag scan failed", error);
+    } finally {
+      state.loading = false;
+      render();
+    }
+  }
+
   function filteredGroups() {
     const term = state.search.trim().toLowerCase();
     if (!term) return state.groups;
@@ -431,6 +498,12 @@
         return text.includes(term);
       })
     );
+  }
+
+  function filteredUnusedTags() {
+    const term = state.search.trim().toLowerCase();
+    if (!term) return state.unusedTags;
+    return state.unusedTags.filter((tag) => String(tag.name || "").toLowerCase().includes(term));
   }
 
   function bytes(value) {
@@ -460,8 +533,31 @@
     notifyRouteChange();
   }
 
+  function openTag(tag) {
+    window.history.pushState({}, "", `/tags/${tag.id}`);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    notifyRouteChange();
+  }
+
   function renderToolbar(parent) {
     const toolbar = el("div", "stash-dc-toolbar");
+    const tools = el("div", "stash-dc-tools");
+    [
+      ["duplicates", "Duplicates"],
+      ["tags", "Unused Tags"],
+    ].forEach(([tool, label]) => {
+      const button = el("button", "stash-dc-tool", label);
+      button.type = "button";
+      button.setAttribute("aria-pressed", String(state.tool === tool));
+      button.addEventListener("click", () => {
+        if (state.tool === tool) return;
+        state.tool = tool;
+        state.search = "";
+        render();
+      });
+      tools.appendChild(button);
+    });
+
     const tabs = el("div", "stash-dc-tabs");
     [
       ["fingerprint", "Fingerprints"],
@@ -481,20 +577,27 @@
 
     const search = el("input", "stash-dc-search");
     search.type = "search";
-    search.placeholder = "Search titles, paths, performers, tags";
+    search.placeholder = state.tool === "tags" ? "Search unused tags" : "Search titles, paths, performers, tags";
     search.value = state.search;
     search.addEventListener("input", () => {
       state.search = search.value;
       render();
     });
 
-    const refresh = el("button", "stash-dc-refresh", "Scan");
+    const refresh = el("button", "stash-dc-refresh", state.tool === "tags" ? "Scan Tags" : "Scan");
     refresh.type = "button";
     refresh.addEventListener("click", () => {
-      state.loaded = false;
-      loadDuplicates(true);
+      if (state.tool === "tags") {
+        state.tagsLoaded = false;
+        loadUnusedTags(true);
+      } else {
+        state.loaded = false;
+        loadDuplicates(true);
+      }
     });
-    toolbar.append(tabs, search, refresh);
+    toolbar.append(tools);
+    if (state.tool === "duplicates") toolbar.append(tabs);
+    toolbar.append(search, refresh);
     parent.appendChild(toolbar);
   }
 
@@ -558,31 +661,61 @@
     return section;
   }
 
+  function renderTag(tag) {
+    const item = el("button", "stash-dc-tag");
+    item.type = "button";
+    item.addEventListener("click", () => openTag(tag));
+    item.appendChild(el("span", "stash-dc-tag-name", tag.name || `Tag ${tag.id}`));
+    item.appendChild(el("span", "stash-dc-tag-id", `ID ${tag.id}`));
+    return item;
+  }
+
+  function renderDuplicateResults(shell) {
+    if (state.loading && !state.groups.length) {
+      shell.appendChild(el("div", "stash-dc-empty", "Scanning database..."));
+      return;
+    }
+    const groups = filteredGroups();
+    if (!groups.length) {
+      shell.appendChild(el("div", "stash-dc-empty", state.loaded ? "No duplicates found for the current scan." : "Run a scan to find duplicates."));
+      return;
+    }
+    const list = el("div", "stash-dc-groups");
+    groups.forEach((group, index) => list.appendChild(renderGroup(group, index)));
+    shell.appendChild(list);
+  }
+
+  function renderUnusedTagResults(shell) {
+    if (state.loading && !state.unusedTags.length) {
+      shell.appendChild(el("div", "stash-dc-empty", "Scanning tags..."));
+      return;
+    }
+    const tags = filteredUnusedTags();
+    if (!tags.length) {
+      shell.appendChild(el("div", "stash-dc-empty", state.tagsLoaded ? "No unused tags found." : "Run a tag scan to find unused tags."));
+      return;
+    }
+    const list = el("div", "stash-dc-tags");
+    tags.forEach((tag) => list.appendChild(renderTag(tag)));
+    shell.appendChild(list);
+  }
+
   function renderInto(container) {
     container.className = "stash-dc-app";
     clear(container);
     const shell = el("section", "stash-dc-shell");
     const titlebar = el("div", "stash-dc-titlebar");
-    titlebar.appendChild(el("h1", "", "Duplicate Checker"));
-    titlebar.appendChild(el("p", "", "Find scenes that share fingerprints or likely matching file properties."));
+    titlebar.appendChild(el("h1", "", state.tool === "tags" ? "Unused Tags" : "Duplicate Checker"));
+    titlebar.appendChild(el("p", "", state.tool === "tags" ? "Find tags that are not attached to any objects." : "Find scenes that share fingerprints or likely matching file properties."));
     shell.appendChild(titlebar);
     renderToolbar(shell);
     if (state.error) shell.appendChild(el("div", "stash-dc-error", state.error));
     if (state.status) shell.appendChild(el("div", "stash-dc-status", state.status));
-    if (state.loading && !state.groups.length) {
-      shell.appendChild(el("div", "stash-dc-empty", "Scanning database..."));
-    } else {
-      const groups = filteredGroups();
-      if (!groups.length) {
-        shell.appendChild(el("div", "stash-dc-empty", state.loaded ? "No duplicates found for the current scan." : "Run a scan to find duplicates."));
-      } else {
-        const list = el("div", "stash-dc-groups");
-        groups.forEach((group, index) => list.appendChild(renderGroup(group, index)));
-        shell.appendChild(list);
-      }
-    }
+    if (state.tool === "tags") renderUnusedTagResults(shell);
+    else renderDuplicateResults(shell);
     container.appendChild(shell);
-    if (!state.loaded && !state.loading && !state.error) loadDuplicates(false);
+    if (state.tool === "tags" && !state.tagsLoaded && !state.loading && !state.error) loadUnusedTags(false);
+    if (state.tool === "duplicates" && !state.loaded && !state.loading && !state.error) loadDuplicates(false);
   }
 
   function render() {

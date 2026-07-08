@@ -10,10 +10,10 @@
 
 - id: duplicate-checker
   name: Duplicate Checker
-  version: 0.1.2
-  date: 2026-07-08 12:30:00
-  path: packages/duplicate-checker-v0.1.2.zip
-  sha256: d4a76abca76659cf9bcba94466cf221b89e949179cd42567b4f546dd49fb8a35
+  version: 0.1.3
+  date: 2026-07-08 13:00:00
+  path: packages/duplicate-checker-v0.1.3.zip
+  sha256: bbbcf4c3e63388d4b30f6e1193695e9929a71e8660e19654914faf46b443c994
   metadata:
     description: Find likely duplicate scenes by fingerprint, file size, and duration.
     url: https://github.com/SJoWie80/Stash-Plugins

@@ -222,6 +222,15 @@
     return (list || []).map((entry) => entry.name || entry.title).filter(Boolean).slice(0, 5);
   }
 
+  function normalizeText(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/&/g, " and ")
+      .replace(/[_\-.[\](){}]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   function fileSize(file) {
     const value = Number(file && file.size);
     return Number.isFinite(value) && value > 0 ? value : 0;
@@ -266,11 +275,23 @@
     return duration ? `size-duration:${size}:${Math.round(duration)}` : `size:${size}`;
   }
 
+  function metadataKeys(scene) {
+    const title = normalizeText(scene && scene.title);
+    if (!title || title.length < 4) return [];
+    const studio = normalizeText(scene.studio && scene.studio.name);
+    const performers = relationNames(scene.performers).map(normalizeText).filter(Boolean).sort();
+    const keys = [];
+    if (studio) keys.push(`title-studio:${title}:${studio}`);
+    if (performers.length) keys.push(`title-performers:${title}:${performers.join("|")}`);
+    if (studio && performers.length) keys.push(`title-studio-performers:${title}:${studio}:${performers.join("|")}`);
+    return keys;
+  }
+
   function detectionKeys(scene) {
     const fps = fingerprintKeys(scene);
     if (state.mode === "fingerprint") return fps;
     const fallback = fallbackKey(scene);
-    return fallback ? fps.concat(fallback) : fps;
+    return fps.concat(metadataKeys(scene), fallback ? [fallback] : []);
   }
 
   function groupScenes(scenes) {
@@ -291,6 +312,12 @@
           ? "Scene hash"
           : key.startsWith("fp:")
             ? "File fingerprint"
+            : key.startsWith("title-studio-performers:")
+              ? "Title + studio + performers"
+              : key.startsWith("title-studio:")
+                ? "Title + studio"
+                : key.startsWith("title-performers:")
+                  ? "Title + performers"
             : key.startsWith("name-size")
               ? "Name + size"
               : key.startsWith("size-duration:")
@@ -517,6 +544,9 @@
     const key = group.key
       .replace(/^scene:/, "")
       .replace(/^fp:/, "")
+      .replace(/^title-studio-performers:/, "title/studio/performers: ")
+      .replace(/^title-studio:/, "title/studio: ")
+      .replace(/^title-performers:/, "title/performers: ")
       .replace(/^name-size-duration:/, "name/size/duration: ")
       .replace(/^name-size:/, "name/size: ")
       .replace(/^size-duration:/, "size/duration: ")

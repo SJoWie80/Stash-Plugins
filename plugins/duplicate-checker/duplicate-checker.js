@@ -24,6 +24,7 @@
     unusedTags: [],
     tagReviewGroups: [],
     selectedTagIds: new Set(),
+    tagMergeSelections: new Map(),
     protectedTagIds: new Set(),
     mode: "fingerprint",
     search: "",
@@ -36,6 +37,14 @@
   };
 
   const HASH_FIELDS = ["checksum", "oshash", "phash"];
+  const TAG_MERGE_TARGETS = [
+    { label: "scenes", query: "findScenes", list: "scenes", mutation: "sceneUpdate", input: "SceneUpdateInput" },
+    { label: "galleries", query: "findGalleries", list: "galleries", mutation: "galleryUpdate", input: "GalleryUpdateInput" },
+    { label: "images", query: "findImages", list: "images", mutation: "imageUpdate", input: "ImageUpdateInput" },
+    { label: "performers", query: "findPerformers", list: "performers", mutation: "performerUpdate", input: "PerformerUpdateInput" },
+    { label: "studios", query: "findStudios", list: "studios", mutation: "studioUpdate", input: "StudioUpdateInput" },
+    { label: "groups", query: "findGroups", list: "groups", mutation: "groupUpdate", input: "GroupUpdateInput" },
+  ];
 
   function el(tag, className, text) {
     const node = document.createElement(tag);
@@ -195,6 +204,18 @@
       { name: typeName }
     );
     return new Set((((data && data.__type) || {}).fields || []).map((field) => field.name));
+  }
+
+  async function graphqlInputFields(typeName) {
+    const data = await graphql(
+      `query StashCleanupInputFields($name: String!) {
+        __type(name: $name) {
+          inputFields { name }
+        }
+      }`,
+      { name: typeName }
+    );
+    return new Set((((data && data.__type) || {}).inputFields || []).map((field) => field.name));
   }
 
   async function loadSchema() {
@@ -548,6 +569,45 @@
     return tags.map((tag) => String(tag.id)).sort((a, b) => Number(a) - Number(b)).join(",");
   }
 
+  function tagReviewGroupKey(group) {
+    return tagGroupSignature(group.tags);
+  }
+
+  function mergeSelectionFor(group) {
+    const key = tagReviewGroupKey(group);
+    if (!state.tagMergeSelections.has(key)) {
+      state.tagMergeSelections.set(key, { keepId: String(group.keep.id), sourceIds: new Set() });
+    }
+    const selection = state.tagMergeSelections.get(key);
+    if (!group.tags.some((tag) => String(tag.id) === selection.keepId)) selection.keepId = String(group.keep.id);
+    selection.sourceIds.delete(selection.keepId);
+    return selection;
+  }
+
+  function setMergeKeep(group, tag) {
+    const selection = mergeSelectionFor(group);
+    selection.keepId = String(tag.id);
+    selection.sourceIds.delete(selection.keepId);
+    render();
+  }
+
+  function toggleMergeSource(group, tag) {
+    const selection = mergeSelectionFor(group);
+    const id = String(tag.id);
+    if (id === selection.keepId) return;
+    if (selection.sourceIds.has(id)) selection.sourceIds.delete(id);
+    else selection.sourceIds.add(id);
+    render();
+  }
+
+  function setAllMergeSources(group, selected) {
+    const selection = mergeSelectionFor(group);
+    selection.sourceIds = selected
+      ? new Set(group.tags.map((tag) => String(tag.id)).filter((id) => id !== selection.keepId))
+      : new Set();
+    render();
+  }
+
   function addTagReviewGroup(output, seen, type, reason, tags, confidence) {
     const unique = Array.from(new Map(tags.filter(Boolean).map((tag) => [String(tag.id), tag])).values());
     if (unique.length < 2) return;
@@ -636,6 +696,7 @@
       const tags = await loadPagedTags(buildTagQuery(tagFields));
       state.allTags = tags.sort((a, b) => tagName(a).localeCompare(tagName(b)));
       state.tagReviewGroups = buildTagReviewGroups(state.allTags);
+      state.tagMergeSelections = new Map();
       state.tagReviewLoaded = true;
       const usedTags = tags.filter((tag) => tagUsageCount(tag) > 0).length;
       state.status = `${state.tagReviewGroups.length} suggestion groups from ${tags.length} tags (${usedTags} used)`;
@@ -707,6 +768,149 @@
     window.history.pushState({}, "", `/tags/${tag.id}`);
     window.dispatchEvent(new PopStateEvent("popstate"));
     notifyRouteChange();
+  }
+
+  function uniqueIds(ids) {
+    return Array.from(new Set(ids.map((id) => String(id)).filter(Boolean)));
+  }
+
+  function objectTagIds(object) {
+    return Array.isArray(object && object.tags) ? object.tags.map((tag) => String(tag.id)).filter(Boolean) : [];
+  }
+
+  async function loadPagedTaggedObjects(target) {
+    const items = [];
+    let total = 0;
+    const query = `query StashCleanupTaggedObjects($filter: FindFilterType) {
+      ${target.query}(filter: $filter) {
+        count
+        ${target.list} {
+          id
+          tags { id }
+        }
+      }
+    }`;
+    for (let page = 1; page <= MAX_PAGES; page += 1) {
+      state.status = `Scanning ${target.label} page ${page}...`;
+      render();
+      const data = await graphql(query, { filter: { page, per_page: PAGE_SIZE } });
+      const result = data && data[target.query];
+      const pageItems = (result && result[target.list]) || [];
+      total = result && typeof result.count === "number" ? result.count : items.length + pageItems.length;
+      items.push(...pageItems);
+      if (!pageItems.length || items.length >= total || pageItems.length < PAGE_SIZE) break;
+    }
+    return items;
+  }
+
+  async function updateTaggedObject(target, object, tagIds) {
+    const input = { id: object.id, tag_ids: tagIds };
+    const withSelection = `mutation StashCleanupUpdateTaggedObject($input: ${target.input}!) {
+      ${target.mutation}(input: $input) { id }
+    }`;
+    try {
+      await graphql(withSelection, { input });
+      return;
+    } catch (error) {
+      const message = error.message || String(error);
+      if (!message.includes("must not have a selection") && !message.includes("has no subfields")) throw error;
+    }
+    await graphql(
+      `mutation StashCleanupUpdateTaggedObject($input: ${target.input}!) {
+        ${target.mutation}(input: $input)
+      }`,
+      { input }
+    );
+  }
+
+  async function mergeTargetTags(target, keepId, sourceIds) {
+    const inputFields = await graphqlInputFields(target.input);
+    if (!inputFields.has("id") || !inputFields.has("tag_ids")) return { target, updated: 0, skipped: true };
+
+    const objects = await loadPagedTaggedObjects(target);
+    let updated = 0;
+    for (let index = 0; index < objects.length; index += 1) {
+      const object = objects[index];
+      const tagIds = objectTagIds(object);
+      if (!tagIds.some((id) => sourceIds.has(id))) continue;
+      const nextTagIds = uniqueIds([...tagIds.filter((id) => !sourceIds.has(id)), keepId]);
+      if (nextTagIds.join(",") === tagIds.join(",")) continue;
+      state.status = `Updating ${target.label} ${updated + 1}...`;
+      render();
+      await updateTaggedObject(target, object, nextTagIds);
+      updated += 1;
+    }
+    return { target, updated, skipped: false };
+  }
+
+  async function destroyMergedTags(tags) {
+    const failed = [];
+    for (let index = 0; index < tags.length; index += 1) {
+      state.status = `Deleting merged tag ${index + 1} of ${tags.length}...`;
+      render();
+      try {
+        await graphql(
+          `mutation StashCleanupTagDestroy($id: ID!) {
+            tagDestroy(input: { id: $id })
+          }`,
+          { id: tags[index].id }
+        );
+      } catch (error) {
+        failed.push({ tag: tags[index], message: error.message || String(error) });
+        state.protectedTagIds.add(String(tags[index].id));
+        console.warn("[Stash Cleanup] merged tag delete failed", tags[index], error);
+      }
+    }
+    return failed;
+  }
+
+  async function mergeTagReviewGroup(group) {
+    const selection = mergeSelectionFor(group);
+    const keep = group.tags.find((tag) => String(tag.id) === selection.keepId);
+    const sourceTags = group.tags.filter((tag) => selection.sourceIds.has(String(tag.id)) && String(tag.id) !== selection.keepId);
+    if (!keep || !sourceTags.length) return;
+
+    const names = sourceTags.map(tagName).join(", ");
+    if (!window.confirm(`Merge ${sourceTags.length} tags into "${tagName(keep)}"?\n\n${names}\n\nThis updates tagged objects first, then deletes the merged tags.`)) return;
+
+    state.loading = true;
+    state.error = "";
+    state.status = `Preparing merge into "${tagName(keep)}"...`;
+    render();
+    try {
+      const [queryFields, mutationFields] = await Promise.all([graphqlTypeFields("Query"), graphqlTypeFields("Mutation")]);
+      if (!mutationFields.has("tagDestroy")) throw new Error("tagDestroy mutation is not available in this Stash GraphQL schema.");
+      const keepId = String(keep.id);
+      const sourceIds = new Set(sourceTags.map((tag) => String(tag.id)));
+      const supportedTargets = TAG_MERGE_TARGETS.filter((target) => queryFields.has(target.query) && mutationFields.has(target.mutation));
+      const results = [];
+      for (let index = 0; index < supportedTargets.length; index += 1) {
+        const target = supportedTargets[index];
+        try {
+          results.push(await mergeTargetTags(target, keepId, sourceIds));
+        } catch (error) {
+          console.warn("[Stash Cleanup] tag merge target failed", target, error);
+          results.push({ target, updated: 0, skipped: true, message: error.message || String(error) });
+        }
+      }
+      const failedDeletes = await destroyMergedTags(sourceTags);
+      state.tagReviewLoaded = false;
+      await loadTagReview(true);
+      const updated = results.filter((result) => !result.skipped && result.updated).map((result) => `${result.updated} ${result.target.label}`).join(", ");
+      state.status = `Merged ${sourceTags.length - failedDeletes.length} tags into "${tagName(keep)}"${updated ? `; updated ${updated}` : ""}`;
+      if (failedDeletes.length) {
+        const failedNames = failedDeletes.slice(0, 6).map((entry) => tagName(entry.tag)).join(", ");
+        const extra = failedDeletes.length > 6 ? ` and ${failedDeletes.length - 6} more` : "";
+        state.error = `${failedDeletes.length} merged tags could not be deleted, usually because Stash still uses them as marker primary tags: ${failedNames}${extra}`;
+      }
+    } catch (error) {
+      state.error = error.message || String(error);
+      state.status = "";
+      console.error("[Stash Cleanup] tag merge failed", error);
+    } finally {
+      state.loading = false;
+      render();
+    }
   }
 
   function selectedUnusedTags() {
@@ -858,6 +1062,8 @@
   }
 
   function renderTagReviewGroup(group, index) {
+    const selection = mergeSelectionFor(group);
+    const selectedCount = selection.sourceIds.size;
     const section = el("section", "stash-dc-review-group");
     const header = el("div", "stash-dc-group-header");
     header.appendChild(el("h2", "", `${group.type} ${index + 1}`));
@@ -867,23 +1073,57 @@
     section.appendChild(el("div", "stash-dc-key", group.reason));
 
     const keep = el("div", "stash-dc-review-keep");
-    keep.appendChild(el("span", "stash-dc-review-label", "Suggested keep"));
-    const keepButton = el("button", "stash-dc-review-tag is-keep", `${tagName(group.keep)} (${tagUsageCount(group.keep)})`);
+    keep.appendChild(el("span", "stash-dc-review-label", "Keep tag"));
+    const keepButton = el("button", "stash-dc-review-tag is-keep", `${tagName(group.tags.find((tag) => String(tag.id) === selection.keepId) || group.keep)} (${tagUsageCount(group.tags.find((tag) => String(tag.id) === selection.keepId) || group.keep)})`);
     keepButton.type = "button";
-    keepButton.addEventListener("click", () => openTag(group.keep));
+    keepButton.addEventListener("click", () => openTag(group.tags.find((tag) => String(tag.id) === selection.keepId) || group.keep));
     keep.appendChild(keepButton);
     section.appendChild(keep);
 
+    const actions = el("div", "stash-dc-review-actions");
+    const selectAll = el("button", "stash-dc-refresh", "Select Merge Tags");
+    selectAll.type = "button";
+    selectAll.addEventListener("click", () => setAllMergeSources(group, true));
+    const clear = el("button", "stash-dc-refresh", "Clear");
+    clear.type = "button";
+    clear.addEventListener("click", () => setAllMergeSources(group, false));
+    const merge = el("button", "stash-dc-danger", `Merge Selected (${selectedCount})`);
+    merge.type = "button";
+    merge.disabled = !selectedCount || state.loading;
+    merge.addEventListener("click", () => mergeTagReviewGroup(group));
+    actions.append(selectAll, clear, merge);
+    section.appendChild(actions);
+
     const list = el("div", "stash-dc-review-tags");
     group.tags.forEach((tag) => {
-      const button = el("button", `stash-dc-review-tag ${String(tag.id) === String(group.keep.id) ? "is-keep" : ""}`);
-      button.type = "button";
-      button.addEventListener("click", () => openTag(tag));
-      button.appendChild(el("span", "stash-dc-review-name", tagName(tag)));
-      button.appendChild(el("span", "stash-dc-review-count", `${tagUsageCount(tag)} uses`));
+      const id = String(tag.id);
+      const card = el("div", `stash-dc-review-tag ${id === selection.keepId ? "is-keep" : ""}`);
+      const controls = el("div", "stash-dc-review-controls");
+      const keepLabel = el("label", "stash-dc-review-choice");
+      const keepRadio = el("input", "");
+      keepRadio.type = "radio";
+      keepRadio.name = `stash-dc-keep-${tagReviewGroupKey(group)}`;
+      keepRadio.checked = id === selection.keepId;
+      keepRadio.addEventListener("change", () => setMergeKeep(group, tag));
+      keepLabel.append(keepRadio, el("span", "", "Keep"));
+      const mergeLabel = el("label", "stash-dc-review-choice");
+      const mergeCheck = el("input", "");
+      mergeCheck.type = "checkbox";
+      mergeCheck.disabled = id === selection.keepId;
+      mergeCheck.checked = selection.sourceIds.has(id);
+      mergeCheck.addEventListener("change", () => toggleMergeSource(group, tag));
+      mergeLabel.append(mergeCheck, el("span", "", "Merge"));
+      controls.append(keepLabel, mergeLabel);
+      card.appendChild(controls);
+      const open = el("button", "stash-dc-review-open");
+      open.type = "button";
+      open.addEventListener("click", () => openTag(tag));
+      open.appendChild(el("span", "stash-dc-review-name", tagName(tag)));
+      open.appendChild(el("span", "stash-dc-review-count", `${tagUsageCount(tag)} uses`));
       const aliases = tagAliases(tag);
-      if (aliases.length) button.appendChild(el("span", "stash-dc-review-aliases", aliases.slice(0, 3).join(", ")));
-      list.appendChild(button);
+      if (aliases.length) open.appendChild(el("span", "stash-dc-review-aliases", aliases.slice(0, 3).join(", ")));
+      card.appendChild(open);
+      list.appendChild(card);
     });
     section.appendChild(list);
     return section;
@@ -1038,7 +1278,7 @@
         state.tool === "tags"
           ? "Find tags that are not attached to any objects."
           : state.tool === "tag-review"
-            ? "Suggest duplicate, noisy, and low-value tags without changing anything."
+            ? "Review duplicate, noisy, and low-value tags, then merge only what you select."
             : "Find scenes that share fingerprints or likely matching file properties."
       )
     );

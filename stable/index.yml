@@ -10,10 +10,10 @@
 
 - id: duplicate-checker
   name: Stash Cleanup
-  version: 0.5.0
-  date: 2026-07-08 18:00:00
-  path: packages/duplicate-checker-v0.5.0.zip
-  sha256: 2670c85bad66418f62849d77330155cf7cc6e5496e62c5904173275bf02a8fe5
+  version: 0.6.0
+  date: 2026-07-08 19:00:00
+  path: packages/duplicate-checker-v0.6.0.zip
+  sha256: b878827e3f73f65095002c1079b5ac7af1dd4b29a061c6131f28fcd868298346
   metadata:
     description: Clean up duplicate scenes, unused tags, and messy metadata.
     url: https://github.com/SJoWie80/Stash-Plugins

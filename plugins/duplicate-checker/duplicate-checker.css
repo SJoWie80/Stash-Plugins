@@ -233,7 +233,7 @@
 .stash-dc-review-tags {
   display: grid;
   gap: 0.5rem;
-  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
 }
 
 .stash-dc-review-tag {
@@ -241,10 +241,9 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
   color: inherit;
-  cursor: pointer;
   display: grid;
-  gap: 0.2rem;
-  min-height: 3.7rem;
+  gap: 0.45rem;
+  min-height: 5.8rem;
   padding: 0.5rem 0.65rem;
   text-align: left;
 }
@@ -255,6 +254,51 @@
 
 .stash-dc-review-tag:hover {
   border-color: rgba(255, 255, 255, 0.32);
+}
+
+.stash-dc-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.6rem 0 0.75rem;
+}
+
+.stash-dc-review-controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.stash-dc-review-choice {
+  align-items: center;
+  color: #d6dce5;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.78rem;
+  gap: 0.28rem;
+  margin: 0;
+}
+
+.stash-dc-review-choice input {
+  margin: 0;
+}
+
+.stash-dc-review-choice input:disabled + span {
+  opacity: 0.45;
+}
+
+.stash-dc-review-open {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  width: 100%;
 }
 
 .stash-dc-review-name {

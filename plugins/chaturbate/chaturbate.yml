@@ -1,6 +1,6 @@
 name: Chaturbate
 description: Browse and watch Chaturbate cams inside Stash.
-version: 1.3.9
+version: 1.4.0
 url: https://github.com/SJoWie80/Stash-Plugins
 exec:
   - python

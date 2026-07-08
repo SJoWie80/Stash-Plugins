@@ -84,8 +84,8 @@
       event.preventDefault();
     }
     window.history.pushState({}, "", ROUTE);
-    window.dispatchEvent(new Event("stash-chaturbate-route"));
-    render();
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    notifyRouteChange();
   }
 
   function notifyRouteChange() {
@@ -411,7 +411,10 @@
   const observer = new MutationObserver(addNav);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   if (window.PluginApi && window.PluginApi.Event && window.PluginApi.Event.addEventListener) {
-    window.PluginApi.Event.addEventListener("stash:location", addNav);
+    window.PluginApi.Event.addEventListener("stash:location", () => {
+      addNav();
+      render();
+    });
   }
   window.addEventListener("popstate", render);
   window.addEventListener("stash-chaturbate-route", render);

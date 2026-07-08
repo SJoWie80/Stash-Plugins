@@ -98,8 +98,9 @@
 .stash-dc-tool,
 .stash-dc-tab,
 .stash-dc-refresh,
+.stash-dc-danger,
 .stash-dc-scene,
-.stash-dc-tag {
+.stash-dc-tag-open {
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: inherit;
   cursor: pointer;
@@ -107,7 +108,8 @@
 
 .stash-dc-tool,
 .stash-dc-tab,
-.stash-dc-refresh {
+.stash-dc-refresh,
+.stash-dc-danger {
   background: #2d3138;
   min-height: 2.25rem;
   padding: 0.35rem 0.75rem;
@@ -143,6 +145,17 @@
 
 .stash-dc-refresh {
   border-radius: 6px;
+}
+
+.stash-dc-danger {
+  background: #6d2f35;
+  border-color: rgba(255, 120, 120, 0.28);
+  border-radius: 6px;
+}
+
+.stash-dc-danger:disabled {
+  cursor: default;
+  opacity: 0.5;
 }
 
 .stash-dc-groups {
@@ -205,6 +218,13 @@
   grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
 }
 
+.stash-dc-tag-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
 .stash-dc-scene {
   background: #1f232b;
   border-radius: 8px;
@@ -219,17 +239,38 @@
 .stash-dc-tag {
   align-items: center;
   background: #1f232b;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 8px;
-  display: grid;
+  display: flex;
   gap: 0.25rem;
   min-height: 4rem;
   padding: 0.6rem 0.75rem;
   text-align: left;
 }
 
+.stash-dc-tag-check {
+  flex: 0 0 auto;
+  height: 1rem;
+  margin: 0 0.45rem 0 0;
+  width: 1rem;
+}
+
+.stash-dc-tag-open {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
 .stash-dc-scene:hover,
 .stash-dc-tag:hover,
 .stash-dc-refresh:hover,
+.stash-dc-danger:hover:not(:disabled),
 .stash-dc-tool:hover,
 .stash-dc-tab:hover {
   border-color: rgba(255, 255, 255, 0.32);

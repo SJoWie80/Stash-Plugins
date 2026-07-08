@@ -1,6 +1,6 @@
 name: Duplicate Checker
 description: Find likely duplicate scenes and unused tags.
-version: 0.2.0
+version: 0.2.1
 url: https://github.com/SJoWie80/Stash-Plugins
 interface: raw
 ui:

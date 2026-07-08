@@ -17,6 +17,7 @@
     status: "",
     groups: [],
     unusedTags: [],
+    selectedTagIds: new Set(),
     mode: "fingerprint",
     search: "",
     loaded: false,
@@ -467,6 +468,7 @@
       if (!usableFields.length) throw new Error("Tag count fields are not available in this Stash GraphQL schema.");
       const tags = await loadPagedTags(buildTagQuery(tagFields));
       state.unusedTags = tags.filter((tag) => tagUsageCount(tag) === 0).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      state.selectedTagIds = new Set(state.unusedTags.map((tag) => String(tag.id)));
       state.tagsLoaded = true;
       state.status = `${state.unusedTags.length} unused tags from ${tags.length} scanned tags`;
     } catch (error) {
@@ -537,6 +539,59 @@
     window.history.pushState({}, "", `/tags/${tag.id}`);
     window.dispatchEvent(new PopStateEvent("popstate"));
     notifyRouteChange();
+  }
+
+  function selectedUnusedTags() {
+    return state.unusedTags.filter((tag) => state.selectedTagIds.has(String(tag.id)));
+  }
+
+  function setAllTagsSelected(selected) {
+    state.selectedTagIds = selected ? new Set(filteredUnusedTags().map((tag) => String(tag.id))) : new Set();
+    render();
+  }
+
+  function toggleTagSelected(tag) {
+    const id = String(tag.id);
+    if (state.selectedTagIds.has(id)) state.selectedTagIds.delete(id);
+    else state.selectedTagIds.add(id);
+    render();
+  }
+
+  async function deleteSelectedTags() {
+    const tags = selectedUnusedTags();
+    if (!tags.length) return;
+    const names = tags.slice(0, 8).map((tag) => tag.name || `Tag ${tag.id}`).join(", ");
+    const extra = tags.length > 8 ? ` and ${tags.length - 8} more` : "";
+    if (!window.confirm(`Delete ${tags.length} unused tags?\n\n${names}${extra}`)) return;
+
+    state.loading = true;
+    state.error = "";
+    state.status = `Deleting ${tags.length} tags...`;
+    render();
+    try {
+      const mutationFields = await graphqlTypeFields("Mutation");
+      if (!mutationFields.has("tagDestroy")) throw new Error("tagDestroy mutation is not available in this Stash GraphQL schema.");
+      for (let index = 0; index < tags.length; index += 1) {
+        state.status = `Deleting tag ${index + 1} of ${tags.length}...`;
+        render();
+        await graphql(
+          `mutation DuplicateCheckerTagDestroy($id: ID!) {
+            tagDestroy(input: { id: $id }) { success }
+          }`,
+          { id: tags[index].id }
+        );
+      }
+      state.tagsLoaded = false;
+      state.selectedTagIds = new Set();
+      await loadUnusedTags(true);
+    } catch (error) {
+      state.error = error.message || String(error);
+      state.status = "";
+      console.error("[Duplicate Checker] tag delete failed", error);
+    } finally {
+      state.loading = false;
+      render();
+    }
   }
 
   function renderToolbar(parent) {
@@ -662,11 +717,17 @@
   }
 
   function renderTag(tag) {
-    const item = el("button", "stash-dc-tag");
-    item.type = "button";
-    item.addEventListener("click", () => openTag(tag));
-    item.appendChild(el("span", "stash-dc-tag-name", tag.name || `Tag ${tag.id}`));
-    item.appendChild(el("span", "stash-dc-tag-id", `ID ${tag.id}`));
+    const item = el("div", "stash-dc-tag");
+    const checkbox = el("input", "stash-dc-tag-check");
+    checkbox.type = "checkbox";
+    checkbox.checked = state.selectedTagIds.has(String(tag.id));
+    checkbox.addEventListener("change", () => toggleTagSelected(tag));
+    const open = el("button", "stash-dc-tag-open");
+    open.type = "button";
+    open.addEventListener("click", () => openTag(tag));
+    open.appendChild(el("span", "stash-dc-tag-name", tag.name || `Tag ${tag.id}`));
+    open.appendChild(el("span", "stash-dc-tag-id", `ID ${tag.id}`));
+    item.append(checkbox, open);
     return item;
   }
 
@@ -695,6 +756,20 @@
       shell.appendChild(el("div", "stash-dc-empty", state.tagsLoaded ? "No unused tags found." : "Run a tag scan to find unused tags."));
       return;
     }
+    const actions = el("div", "stash-dc-tag-actions");
+    const selected = selectedUnusedTags().length;
+    const selectAll = el("button", "stash-dc-refresh", "Select Visible");
+    selectAll.type = "button";
+    selectAll.addEventListener("click", () => setAllTagsSelected(true));
+    const clear = el("button", "stash-dc-refresh", "Clear");
+    clear.type = "button";
+    clear.addEventListener("click", () => setAllTagsSelected(false));
+    const remove = el("button", "stash-dc-danger", `Delete Selected (${selected})`);
+    remove.type = "button";
+    remove.disabled = !selected || state.loading;
+    remove.addEventListener("click", deleteSelectedTags);
+    actions.append(selectAll, clear, remove);
+    shell.appendChild(actions);
     const list = el("div", "stash-dc-tags");
     tags.forEach((tag) => list.appendChild(renderTag(tag)));
     shell.appendChild(list);

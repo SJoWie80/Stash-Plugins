@@ -10,40 +10,40 @@
 
 - id: duplicate-checker
   name: Stash Cleanup
-  version: 0.4.0
-  date: 2026-07-08 16:00:00
-  path: packages/duplicate-checker-v0.4.0.zip
-  sha256: c36a99f3a4017f8aee4d531144d8ebbbceea51b5abc6f256624384d2b38281d3
+  version: 0.4.1
+  date: 2026-07-08 17:00:00
+  path: packages/duplicate-checker-v0.4.1.zip
+  sha256: f0b6ba57856a12196e3d90cdc23896b23e7b697dc490c7ae4f312013be5acbff
   metadata:
     description: Clean up duplicate scenes, unused tags, and messy metadata.
     url: https://github.com/SJoWie80/Stash-Plugins
 
 - id: folder-view
   name: Folder View
-  version: 1.2.3
-  date: 2026-07-08 16:30:00
-  path: packages/folder-view-v1.2.3.zip
-  sha256: 0e98d52bfb01a3e2f582f62a58be8b0cfda50d71360aa0e0a2cdab100f1b80c4
+  version: 1.2.4
+  date: 2026-07-08 17:00:00
+  path: packages/folder-view-v1.2.4.zip
+  sha256: ab2985883ce0f647dd821cc09633fd4f711f5ca2aeb28ef45baf016a3ee02315
   metadata:
     description: Browse scenes, galleries, and images through a Stash library folder tree.
     url: https://github.com/SJoWie80/Stash-Plugins
 
 - id: now-playing
   name: Now Playing
-  version: 1.2.3
-  date: 2026-07-08 16:30:00
-  path: packages/now-playing-v1.2.3.zip
-  sha256: d0f36ff8f6989b1a4360d2037c889e49496ea99db645ecc9a3b77e677bb3bfbc
+  version: 1.2.4
+  date: 2026-07-08 17:00:00
+  path: packages/now-playing-v1.2.4.zip
+  sha256: d5f70acabce1f34cb1c14b557567fb57aec07eef7228a305814ad070ae3612f6
   metadata:
     description: Shows active Stash playback from browser sessions and server-side scene activity.
     url: https://github.com/SJoWie80/Stash-Plugins
 
 - id: tag-image-picker
   name: Tag Icon Studio
-  version: 0.2.16
-  date: 2026-07-08 16:30:00
-  path: packages/tag-image-picker-v0.2.16.zip
-  sha256: a2cb4c48af3ab32a2f76496b9d72ed11fdff4df5c39183883f634f225763e066
+  version: 0.2.17
+  date: 2026-07-08 17:00:00
+  path: packages/tag-image-picker-v0.2.17.zip
+  sha256: c8e2b1121da76742789492b3d4c11ddb0e21098ae278bcda5e72175ac35e7c1f
   metadata:
     description: Generate or import consistent icon artwork and assign it to Stash tags.
     url: https://github.com/SJoWie80/Stash-Plugins

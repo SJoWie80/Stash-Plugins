@@ -451,12 +451,12 @@
   }
 
   function render() {
-    if (state.routeContainer) {
+    const navButton = document.querySelector(`#${NAV_ID} .stash-np-nav-button`);
+    if (navButton) navButton.classList.toggle("active", isRoute());
+    if (state.routeContainer && isRoute()) {
       renderInto(state.routeContainer);
       return;
     }
-    const navButton = document.querySelector(`#${NAV_ID} .stash-np-nav-button`);
-    if (navButton) navButton.classList.toggle("active", isRoute());
   }
 
   function registerPluginRoute() {
@@ -498,7 +498,10 @@
   const observer = new MutationObserver(addNav);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   if (window.PluginApi && window.PluginApi.Event && window.PluginApi.Event.addEventListener) {
-    window.PluginApi.Event.addEventListener("stash:location", addNav);
+    window.PluginApi.Event.addEventListener("stash:location", () => {
+      addNav();
+      render();
+    });
   }
   window.addEventListener("popstate", render);
   window.addEventListener("stash-now-playing-route", render);

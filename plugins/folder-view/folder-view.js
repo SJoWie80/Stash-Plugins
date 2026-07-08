@@ -603,13 +603,13 @@
 
   function render() {
     try {
-      if (state.routeContainer) {
+      const navButton = document.querySelector(`#${NAV_ID} .stash-fv-nav-button`);
+      if (navButton) navButton.classList.toggle("active", isRoute());
+      if (state.routeContainer && isRoute()) {
         renderInto(state.routeContainer);
         return;
       }
       const app = getApp();
-      const navButton = document.querySelector(`#${NAV_ID} .stash-fv-nav-button`);
-      if (navButton) navButton.classList.toggle("active", isRoute());
       if (isRoute() && state.routeRegistered) {
         app.hidden = true;
         return;
@@ -657,7 +657,10 @@
   const observer = new MutationObserver(addNav);
   observer.observe(document.documentElement, { childList: true, subtree: true });
   if (window.PluginApi && window.PluginApi.Event && window.PluginApi.Event.addEventListener) {
-    window.PluginApi.Event.addEventListener("stash:location", addNav);
+    window.PluginApi.Event.addEventListener("stash:location", () => {
+      addNav();
+      render();
+    });
   }
   window.addEventListener("popstate", render);
   window.addEventListener("stash-folder-view-route", render);

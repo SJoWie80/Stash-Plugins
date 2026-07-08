@@ -20,6 +20,8 @@
     loaded: false,
   };
 
+  const HASH_FIELDS = ["checksum", "oshash", "phash"];
+
   function el(tag, className, text) {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -148,6 +150,61 @@
     return scenes;
   }
 
+  async function graphqlTypeFields(typeName) {
+    const data = await graphql(
+      `query DuplicateCheckerTypeFields($name: String!) {
+        __type(name: $name) {
+          fields { name }
+        }
+      }`,
+      { name: typeName }
+    );
+    return new Set((((data && data.__type) || {}).fields || []).map((field) => field.name));
+  }
+
+  async function loadSchema() {
+    try {
+      const [scene, file, videoFile] = await Promise.all([
+        graphqlTypeFields("Scene"),
+        graphqlTypeFields("File"),
+        graphqlTypeFields("VideoFile"),
+      ]);
+      return { scene, file, videoFile };
+    } catch (error) {
+      console.warn("[Duplicate Checker] schema introspection failed", error);
+      return null;
+    }
+  }
+
+  function hasField(schema, typeName, fieldName) {
+    return Boolean(schema && schema[typeName] && schema[typeName].has(fieldName));
+  }
+
+  function buildSchemaQuery(schema) {
+    const sceneFields = HASH_FIELDS.filter((field) => hasField(schema, "scene", field));
+    const fileFields = ["id", "path", "basename", "size", "duration"].filter(
+      (field) => hasField(schema, "file", field) || hasField(schema, "videoFile", field)
+    );
+    if (!fileFields.length) fileFields.push("id");
+    if (hasField(schema, "file", "fingerprints") || hasField(schema, "videoFile", "fingerprints")) {
+      fileFields.push("fingerprints { type value }");
+    }
+    return `query DuplicateCheckerScenesSchema($filter: FindFilterType) {
+      findScenes(filter: $filter) {
+        count
+        scenes {
+          id title date
+          ${sceneFields.join("\n          ")}
+          paths { screenshot }
+          files { ${fileFields.join(" ")} }
+          studio { name }
+          performers { name }
+          tags { name }
+        }
+      }
+    }`;
+  }
+
   function normalizePath(path) {
     return String(path || "").replace(/\\/g, "/");
   }
@@ -177,22 +234,35 @@
   }
 
   function fingerprintKeys(scene) {
+    const sceneKeys = HASH_FIELDS.map((field) => {
+      const value = String((scene && scene[field]) || "").toLowerCase();
+      return value ? `scene:${field}:${value}` : "";
+    }).filter(Boolean);
     const file = firstFile(scene);
     const fingerprints = (file && file.fingerprints) || [];
-    return fingerprints
+    const fileKeys = fingerprints
       .map((fingerprint) => {
         const type = String(fingerprint.type || "").toLowerCase();
         const value = String(fingerprint.value || "").toLowerCase();
         return type && value ? `fp:${type}:${value}` : "";
       })
       .filter(Boolean);
+    return sceneKeys.concat(fileKeys);
+  }
+
+  function basenameStem(path) {
+    const normalized = normalizePath(path).toLowerCase();
+    const name = normalized.slice(normalized.lastIndexOf("/") + 1);
+    return name.replace(/\.[^.]+$/, "").replace(/\s*\(\d+\)\s*$/, "").trim();
   }
 
   function fallbackKey(scene) {
     const file = firstFile(scene);
     const size = fileSize(file);
     const duration = sceneDuration(scene);
+    const name = basenameStem((file && (file.basename || file.path)) || "");
     if (!size) return "";
+    if (name) return duration ? `name-size-duration:${name}:${size}:${Math.round(duration)}` : `name-size:${name}:${size}`;
     return duration ? `size-duration:${size}:${Math.round(duration)}` : `size:${size}`;
   }
 
@@ -217,7 +287,16 @@
       .filter((entry) => entry[1].length > 1)
       .map(([key, items]) => {
         const unique = Array.from(new Map(items.map((item) => [item.id, item])).values());
-        return { key, scenes: unique, type: key.startsWith("fp:") ? "Fingerprint" : key.startsWith("size-duration:") ? "Size + duration" : "File size" };
+        const type = key.startsWith("scene:")
+          ? "Scene hash"
+          : key.startsWith("fp:")
+            ? "File fingerprint"
+            : key.startsWith("name-size")
+              ? "Name + size"
+              : key.startsWith("size-duration:")
+                ? "Size + duration"
+                : "File size";
+        return { key, scenes: unique, type };
       })
       .filter((group) => {
         const signature = group.scenes.map((scene) => scene.id).sort((a, b) => Number(a) - Number(b)).join(",");
@@ -276,20 +355,26 @@
     try {
       let scenes;
       try {
-        scenes = await loadPaged(fingerprintQuery);
+        const schema = await loadSchema();
+        scenes = schema ? await loadPaged(buildSchemaQuery(schema)) : await loadPaged(fingerprintQuery);
       } catch (error) {
-        console.warn("[Duplicate Checker] fingerprint query failed, falling back to size/duration", error);
+        console.warn("[Duplicate Checker] schema-aware query failed, falling back to file fingerprints", error);
         try {
-          scenes = await loadPaged(fallbackQuery);
-        } catch (fallbackError) {
-          console.warn("[Duplicate Checker] size/duration query failed, falling back to file size", fallbackError);
-          scenes = await loadPaged(minimalQuery);
+          scenes = await loadPaged(fingerprintQuery);
+        } catch (fingerprintError) {
+          console.warn("[Duplicate Checker] fingerprint query failed, falling back to size/duration", fingerprintError);
+          try {
+            scenes = await loadPaged(fallbackQuery);
+          } catch (fallbackError) {
+            console.warn("[Duplicate Checker] size/duration query failed, falling back to file size", fallbackError);
+            scenes = await loadPaged(minimalQuery);
+          }
         }
       }
       state.groups = groupScenes(scenes);
       state.loaded = true;
       const duplicateCount = state.groups.reduce((sum, group) => sum + group.scenes.length, 0);
-      state.status = `${state.groups.length} duplicate groups, ${duplicateCount} scenes involved`;
+      state.status = `${state.groups.length} duplicate groups, ${duplicateCount} scenes involved from ${scenes.length} scanned scenes`;
     } catch (error) {
       state.error = error.message || String(error);
       state.status = "";
@@ -429,7 +514,13 @@
     const type = el("span", "stash-dc-type", group.type);
     header.append(title, badge, type);
     section.appendChild(header);
-    const key = group.key.replace(/^fp:/, "").replace(/^size-duration:/, "size/duration: ").replace(/^size:/, "size: ");
+    const key = group.key
+      .replace(/^scene:/, "")
+      .replace(/^fp:/, "")
+      .replace(/^name-size-duration:/, "name/size/duration: ")
+      .replace(/^name-size:/, "name/size: ")
+      .replace(/^size-duration:/, "size/duration: ")
+      .replace(/^size:/, "size: ");
     section.appendChild(el("div", "stash-dc-key", key));
     const list = el("div", "stash-dc-scenes");
     group.scenes.forEach((scene) => list.appendChild(renderScene(scene)));

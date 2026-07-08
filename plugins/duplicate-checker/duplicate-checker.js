@@ -87,15 +87,15 @@
       wrap.id = NAV_ID;
       const link = el("a", "nav-link stash-dc-nav-button");
       link.href = ROUTE;
-      link.setAttribute("aria-label", "Duplicate Checker");
-      link.appendChild(el("span", "fa fa-copy fas fa-copy stash-dc-nav-icon"));
-      link.appendChild(el("span", "stash-dc-nav-text", "Duplicates"));
+      link.setAttribute("aria-label", "Stash Cleanup");
+      link.appendChild(el("span", "fa fa-broom fas fa-broom stash-dc-nav-icon"));
+      link.appendChild(el("span", "stash-dc-nav-text", "Cleanup"));
       link.addEventListener("click", navigate);
       wrap.appendChild(link);
       nav.appendChild(wrap);
       removeLauncher();
     } catch (error) {
-      console.error("[Duplicate Checker] failed adding nav", error);
+      console.error("[Stash Cleanup] failed adding nav", error);
     }
   }
 
@@ -106,7 +106,7 @@
 
   function addLauncher() {
     if (document.getElementById(NAV_ID) || document.getElementById(LAUNCHER_ID)) return;
-    const launcher = el("button", "stash-dc-launcher", "Duplicates");
+    const launcher = el("button", "stash-dc-launcher", "Cleanup");
     launcher.id = LAUNCHER_ID;
     launcher.type = "button";
     launcher.addEventListener("click", navigate);
@@ -191,7 +191,7 @@
       ]);
       return { scene, file, videoFile };
     } catch (error) {
-      console.warn("[Duplicate Checker] schema introspection failed", error);
+      console.warn("[Stash Cleanup] schema introspection failed", error);
       return null;
     }
   }
@@ -420,15 +420,15 @@
         const schema = await loadSchema();
         scenes = schema ? await loadPaged(buildSchemaQuery(schema)) : await loadPaged(fingerprintQuery);
       } catch (error) {
-        console.warn("[Duplicate Checker] schema-aware query failed, falling back to file fingerprints", error);
+        console.warn("[Stash Cleanup] schema-aware query failed, falling back to file fingerprints", error);
         try {
           scenes = await loadPaged(fingerprintQuery);
         } catch (fingerprintError) {
-          console.warn("[Duplicate Checker] fingerprint query failed, falling back to size/duration", fingerprintError);
+          console.warn("[Stash Cleanup] fingerprint query failed, falling back to size/duration", fingerprintError);
           try {
             scenes = await loadPaged(fallbackQuery);
           } catch (fallbackError) {
-            console.warn("[Duplicate Checker] size/duration query failed, falling back to file size", fallbackError);
+            console.warn("[Stash Cleanup] size/duration query failed, falling back to file size", fallbackError);
             scenes = await loadPaged(minimalQuery);
           }
         }
@@ -440,7 +440,7 @@
     } catch (error) {
       state.error = error.message || String(error);
       state.status = "";
-      console.error("[Duplicate Checker] scan failed", error);
+      console.error("[Stash Cleanup] scan failed", error);
     } finally {
       state.loading = false;
       render();
@@ -474,7 +474,7 @@
     } catch (error) {
       state.error = error.message || String(error);
       state.status = "";
-      console.error("[Duplicate Checker] tag scan failed", error);
+      console.error("[Stash Cleanup] tag scan failed", error);
     } finally {
       state.loading = false;
       render();
@@ -575,8 +575,8 @@
         state.status = `Deleting tag ${index + 1} of ${tags.length}...`;
         render();
         await graphql(
-          `mutation DuplicateCheckerTagDestroy($id: ID!) {
-            tagDestroy(input: { id: $id }) { success }
+          `mutation StashCleanupTagDestroy($id: ID!) {
+            tagDestroy(input: { id: $id })
           }`,
           { id: tags[index].id }
         );
@@ -587,7 +587,7 @@
     } catch (error) {
       state.error = error.message || String(error);
       state.status = "";
-      console.error("[Duplicate Checker] tag delete failed", error);
+      console.error("[Stash Cleanup] tag delete failed", error);
     } finally {
       state.loading = false;
       render();
@@ -780,7 +780,7 @@
     clear(container);
     const shell = el("section", "stash-dc-shell");
     const titlebar = el("div", "stash-dc-titlebar");
-    titlebar.appendChild(el("h1", "", state.tool === "tags" ? "Unused Tags" : "Duplicate Checker"));
+    titlebar.appendChild(el("h1", "", state.tool === "tags" ? "Unused Tags" : "Stash Cleanup"));
     titlebar.appendChild(el("p", "", state.tool === "tags" ? "Find tags that are not attached to any objects." : "Find scenes that share fingerprints or likely matching file properties."));
     shell.appendChild(titlebar);
     renderToolbar(shell);
@@ -813,7 +813,7 @@
       app.hidden = false;
       renderInto(app);
     } catch (error) {
-      console.error("[Duplicate Checker] render failed", error);
+      console.error("[Stash Cleanup] render failed", error);
     }
   }
 

@@ -18,6 +18,7 @@
     groups: [],
     unusedTags: [],
     selectedTagIds: new Set(),
+    protectedTagIds: new Set(),
     mode: "fingerprint",
     search: "",
     loaded: false,
@@ -468,7 +469,7 @@
       if (!usableFields.length) throw new Error("Tag count fields are not available in this Stash GraphQL schema.");
       const tags = await loadPagedTags(buildTagQuery(tagFields));
       state.unusedTags = tags.filter((tag) => tagUsageCount(tag) === 0).sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-      state.selectedTagIds = new Set(state.unusedTags.map((tag) => String(tag.id)));
+      state.selectedTagIds = new Set(state.unusedTags.map((tag) => String(tag.id)).filter((id) => !state.protectedTagIds.has(id)));
       state.tagsLoaded = true;
       state.status = `${state.unusedTags.length} unused tags from ${tags.length} scanned tags`;
     } catch (error) {
@@ -542,16 +543,19 @@
   }
 
   function selectedUnusedTags() {
-    return state.unusedTags.filter((tag) => state.selectedTagIds.has(String(tag.id)));
+    return state.unusedTags.filter((tag) => state.selectedTagIds.has(String(tag.id)) && !state.protectedTagIds.has(String(tag.id)));
   }
 
   function setAllTagsSelected(selected) {
-    state.selectedTagIds = selected ? new Set(filteredUnusedTags().map((tag) => String(tag.id))) : new Set();
+    state.selectedTagIds = selected
+      ? new Set(filteredUnusedTags().map((tag) => String(tag.id)).filter((id) => !state.protectedTagIds.has(id)))
+      : new Set();
     render();
   }
 
   function toggleTagSelected(tag) {
     const id = String(tag.id);
+    if (state.protectedTagIds.has(id)) return;
     if (state.selectedTagIds.has(id)) state.selectedTagIds.delete(id);
     else state.selectedTagIds.add(id);
     render();
@@ -571,19 +575,32 @@
     try {
       const mutationFields = await graphqlTypeFields("Mutation");
       if (!mutationFields.has("tagDestroy")) throw new Error("tagDestroy mutation is not available in this Stash GraphQL schema.");
+      const failed = [];
       for (let index = 0; index < tags.length; index += 1) {
         state.status = `Deleting tag ${index + 1} of ${tags.length}...`;
         render();
-        await graphql(
-          `mutation StashCleanupTagDestroy($id: ID!) {
-            tagDestroy(input: { id: $id })
-          }`,
-          { id: tags[index].id }
-        );
+        try {
+          await graphql(
+            `mutation StashCleanupTagDestroy($id: ID!) {
+              tagDestroy(input: { id: $id })
+            }`,
+            { id: tags[index].id }
+          );
+        } catch (error) {
+          const message = error.message || String(error);
+          failed.push({ tag: tags[index], message });
+          state.protectedTagIds.add(String(tags[index].id));
+          state.selectedTagIds.delete(String(tags[index].id));
+          console.warn("[Stash Cleanup] skipped tag delete", tags[index], error);
+        }
       }
       state.tagsLoaded = false;
-      state.selectedTagIds = new Set();
       await loadUnusedTags(true);
+      if (failed.length) {
+        const names = failed.slice(0, 6).map((entry) => entry.tag.name || `Tag ${entry.tag.id}`).join(", ");
+        const extra = failed.length > 6 ? ` and ${failed.length - 6} more` : "";
+        state.error = `${failed.length} tags could not be deleted, usually because Stash still uses them as marker primary tags: ${names}${extra}`;
+      }
     } catch (error) {
       state.error = error.message || String(error);
       state.status = "";
@@ -719,14 +736,16 @@
   function renderTag(tag) {
     const item = el("div", "stash-dc-tag");
     const checkbox = el("input", "stash-dc-tag-check");
+    const protectedTag = state.protectedTagIds.has(String(tag.id));
     checkbox.type = "checkbox";
+    checkbox.disabled = protectedTag;
     checkbox.checked = state.selectedTagIds.has(String(tag.id));
     checkbox.addEventListener("change", () => toggleTagSelected(tag));
     const open = el("button", "stash-dc-tag-open");
     open.type = "button";
     open.addEventListener("click", () => openTag(tag));
     open.appendChild(el("span", "stash-dc-tag-name", tag.name || `Tag ${tag.id}`));
-    open.appendChild(el("span", "stash-dc-tag-id", `ID ${tag.id}`));
+    open.appendChild(el("span", "stash-dc-tag-id", protectedTag ? `ID ${tag.id} - protected marker tag` : `ID ${tag.id}`));
     item.append(checkbox, open);
     return item;
   }

@@ -255,6 +255,11 @@
   width: 1rem;
 }
 
+.stash-dc-tag-check:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
 .stash-dc-tag-open {
   background: transparent;
   border: 0;

@@ -171,8 +171,6 @@
   }
 
   function sceneDuration(scene) {
-    const direct = Number(scene && scene.duration);
-    if (Number.isFinite(direct) && direct > 0) return direct;
     const file = firstFile(scene);
     const value = Number(file && file.duration);
     return Number.isFinite(value) && value > 0 ? value : 0;
@@ -194,8 +192,8 @@
     const file = firstFile(scene);
     const size = fileSize(file);
     const duration = sceneDuration(scene);
-    if (!size || !duration) return "";
-    return `size-duration:${size}:${Math.round(duration)}`;
+    if (!size) return "";
+    return duration ? `size-duration:${size}:${Math.round(duration)}` : `size:${size}`;
   }
 
   function detectionKeys(scene) {
@@ -219,7 +217,7 @@
       .filter((entry) => entry[1].length > 1)
       .map(([key, items]) => {
         const unique = Array.from(new Map(items.map((item) => [item.id, item])).values());
-        return { key, scenes: unique, type: key.startsWith("fp:") ? "Fingerprint" : "Size + duration" };
+        return { key, scenes: unique, type: key.startsWith("fp:") ? "Fingerprint" : key.startsWith("size-duration:") ? "Size + duration" : "File size" };
       })
       .filter((group) => {
         const signature = group.scenes.map((scene) => scene.id).sort((a, b) => Number(a) - Number(b)).join(",");
@@ -240,7 +238,7 @@
       findScenes(filter: $filter) {
         count
         scenes {
-          id title date duration
+          id title date
           paths { screenshot }
           files { id path basename size duration fingerprints { type value } }
           studio { name }
@@ -253,9 +251,22 @@
       findScenes(filter: $filter) {
         count
         scenes {
-          id title date duration
+          id title date
           paths { screenshot }
           files { id path basename size duration }
+          studio { name }
+          performers { name }
+          tags { name }
+        }
+      }
+    }`;
+    const minimalQuery = `query DuplicateCheckerScenesMinimal($filter: FindFilterType) {
+      findScenes(filter: $filter) {
+        count
+        scenes {
+          id title date
+          paths { screenshot }
+          files { id path basename size }
           studio { name }
           performers { name }
           tags { name }
@@ -268,7 +279,12 @@
         scenes = await loadPaged(fingerprintQuery);
       } catch (error) {
         console.warn("[Duplicate Checker] fingerprint query failed, falling back to size/duration", error);
-        scenes = await loadPaged(fallbackQuery);
+        try {
+          scenes = await loadPaged(fallbackQuery);
+        } catch (fallbackError) {
+          console.warn("[Duplicate Checker] size/duration query failed, falling back to file size", fallbackError);
+          scenes = await loadPaged(minimalQuery);
+        }
       }
       state.groups = groupScenes(scenes);
       state.loaded = true;
@@ -413,7 +429,7 @@
     const type = el("span", "stash-dc-type", group.type);
     header.append(title, badge, type);
     section.appendChild(header);
-    const key = group.key.replace(/^fp:/, "").replace(/^size-duration:/, "size/duration: ");
+    const key = group.key.replace(/^fp:/, "").replace(/^size-duration:/, "size/duration: ").replace(/^size:/, "size: ");
     section.appendChild(el("div", "stash-dc-key", key));
     const list = el("div", "stash-dc-scenes");
     group.scenes.forEach((scene) => list.appendChild(renderScene(scene)));

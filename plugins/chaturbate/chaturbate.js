@@ -7,6 +7,10 @@
   const HLS_JS = "https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js";
   const API_URL = `https://chaturbate.com/api/public/${["affili", "ates"].join("")}/onlinerooms/`;
   const CODE = String.fromCharCode(105, 112, 83, 88, 76);
+  const NAV_ICON =
+    '<svg aria-hidden="true" focusable="false" class="svg-inline--fa fa-icon nav-menu-icon d-block d-xl-inline mb-2 mb-xl-0 stash-cb-nav-icon" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' +
+    '<path fill="currentColor" d="M4.5 6A2.5 2.5 0 0 0 2 8.5v7A2.5 2.5 0 0 0 4.5 18h8A2.5 2.5 0 0 0 15 15.5v-.9l4.3 2.5A1.8 1.8 0 0 0 22 15.55v-7.1a1.8 1.8 0 0 0-2.7-1.56L15 9.4v-.9A2.5 2.5 0 0 0 12.5 6h-8Zm0 2h8a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-7a.5.5 0 0 1 .5-.5Zm10.5 3.7 5-2.9v6.4l-5-2.9v-.6Z"/>' +
+    "</svg>";
 
   const state = {
     gender: "f",
@@ -113,7 +117,7 @@
   }
 
   function findNav() {
-    const preferred = document.querySelector(".navbar-collapse .navbar-nav");
+    const preferred = document.querySelector("nav .navbar-nav") || document.querySelector(".navbar-collapse .navbar-nav");
     if (preferred) {
       return preferred;
     }
@@ -134,17 +138,21 @@
       }
 
       const nav = findNav();
-      if (!nav) {
+      const scenesLink = document.querySelector('a[href="/scenes"]') || document.querySelector('a[href="/scenes/"]');
+      if (!nav || !scenesLink) {
         return;
       }
 
       const wrap = el("div", "stash-cb-nav-wrap");
       wrap.id = NAV_ID;
-      const link = el("a", "nav-link stash-cb-nav-button");
+      wrap.className = scenesLink.parentElement ? scenesLink.parentElement.className : "nav-item";
+      const link = el("a", "");
       link.href = ROUTE;
+      link.id = "stash-cb-nav-button";
+      link.title = "Chaturbate";
       link.setAttribute("aria-label", "Chaturbate");
-      link.appendChild(el("span", "fa fa-video-camera fas fa-video stash-cb-nav-icon"));
-      link.appendChild(el("span", "stash-cb-nav-text", "Chaturbate"));
+      link.className = `${scenesLink.className.replace(/\bactive\b/g, "").trim()} stash-cb-nav-button`.trim();
+      link.innerHTML = `${NAV_ICON}<span>Chaturbate</span>`;
       link.addEventListener("click", navigate);
       wrap.appendChild(link);
       nav.appendChild(wrap);
@@ -402,6 +410,9 @@
 
   const observer = new MutationObserver(addNav);
   observer.observe(document.documentElement, { childList: true, subtree: true });
+  if (window.PluginApi && window.PluginApi.Event && window.PluginApi.Event.addEventListener) {
+    window.PluginApi.Event.addEventListener("stash:location", addNav);
+  }
   window.addEventListener("popstate", render);
   window.addEventListener("stash-chaturbate-route", render);
 

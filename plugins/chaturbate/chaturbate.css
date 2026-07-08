@@ -1,35 +1,5 @@
-.stash-cb-nav-wrap {
-  align-items: center;
-  display: inline-flex;
-}
-
-.stash-cb-nav-button {
-  align-items: center;
-  color: inherit;
-  display: inline-flex;
-  gap: 0.4rem;
-  white-space: nowrap;
-}
-
-.stash-cb-nav-button:hover,
-.stash-cb-nav-button:focus {
-  color: #fff;
-  text-decoration: none;
-}
-
-.stash-cb-nav-button.active,
-.stash-cb-nav-button[aria-current="page"] {
-  color: #fff;
-}
-
 .stash-cb-nav-icon {
-  color: #f46b93;
-  font-size: 0.95rem;
-  opacity: 0.95;
-}
-
-.stash-cb-nav-text {
-  display: inline-block;
+  color: currentColor;
 }
 
 .stash-cb-app[hidden] {

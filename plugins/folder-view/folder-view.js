@@ -7,6 +7,10 @@
   const APP_ID = "stash-folder-view-root";
   const PAGE_SIZE = 200;
   const MAX_PAGES = 100;
+  const NAV_ICON =
+    '<svg aria-hidden="true" focusable="false" class="svg-inline--fa fa-icon nav-menu-icon d-block d-xl-inline mb-2 mb-xl-0 stash-fv-nav-icon" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' +
+    '<path fill="currentColor" d="M3 6.5A2.5 2.5 0 0 1 5.5 4H10l2 2h6.5A2.5 2.5 0 0 1 21 8.5v8A3.5 3.5 0 0 1 17.5 20h-11A3.5 3.5 0 0 1 3 16.5v-10Zm2 2v8A1.5 1.5 0 0 0 6.5 18h11a1.5 1.5 0 0 0 1.5-1.5v-8A.5.5 0 0 0 18.5 8h-7.33l-2-2H5.5a.5.5 0 0 0-.5.5v2Z"/>' +
+    "</svg>";
   const TYPES = {
     scenes: { label: "Scenes", listKey: "scenes", resultKey: "findScenes", route: "/scenes/", query: "?qsort=date&qfp=1&continue=false" },
     galleries: { label: "Galleries", listKey: "galleries", resultKey: "findGalleries", route: "/galleries/", query: "?qsort=date&qfp=1" },
@@ -79,7 +83,7 @@
   }
 
   function findNav() {
-    const preferred = document.querySelector(".navbar-collapse .navbar-nav");
+    const preferred = document.querySelector("nav .navbar-nav") || document.querySelector(".navbar-collapse .navbar-nav");
     if (preferred) return preferred;
     const labels = ["Scenes", "Images", "Groups", "Markers", "Performers", "Studios", "Tags"];
     return Array.from(document.querySelectorAll("nav, header, .navbar, .navbar-nav, .btn-toolbar, div")).find((node) => {
@@ -95,14 +99,18 @@
         return;
       }
       const nav = findNav();
-      if (!nav) return;
+      const scenesLink = document.querySelector('a[href="/scenes"]') || document.querySelector('a[href="/scenes/"]');
+      if (!nav || !scenesLink) return;
       const wrap = el("div", "stash-fv-nav-wrap");
       wrap.id = NAV_ID;
-      const link = el("a", "nav-link stash-fv-nav-button");
+      wrap.className = scenesLink.parentElement ? scenesLink.parentElement.className : "nav-item";
+      const link = el("a", "");
       link.href = ROUTE;
+      link.id = "stash-fv-nav-button";
+      link.title = "Folder View";
       link.setAttribute("aria-label", "Folder View");
-      link.appendChild(el("span", "fa fa-folder fas fa-folder stash-fv-nav-icon"));
-      link.appendChild(el("span", "stash-fv-nav-text", "Folder View"));
+      link.className = `${scenesLink.className.replace(/\bactive\b/g, "").trim()} stash-fv-nav-button`.trim();
+      link.innerHTML = `${NAV_ICON}<span>Folder View</span>`;
       link.addEventListener("click", navigate);
       wrap.appendChild(link);
       nav.appendChild(wrap);
@@ -648,6 +656,9 @@
 
   const observer = new MutationObserver(addNav);
   observer.observe(document.documentElement, { childList: true, subtree: true });
+  if (window.PluginApi && window.PluginApi.Event && window.PluginApi.Event.addEventListener) {
+    window.PluginApi.Event.addEventListener("stash:location", addNav);
+  }
   window.addEventListener("popstate", render);
   window.addEventListener("stash-folder-view-route", render);
   if (document.readyState === "loading") {

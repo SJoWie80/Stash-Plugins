@@ -1,9 +1,9 @@
 - id: chaturbate
   name: Chaturbate
-  version: 1.3.8
-  date: 2026-07-01 17:00:00
-  path: packages/chaturbate-v1.3.8.zip
-  sha256: d561be4f30e043de2358b2e3692eb4cc3695a031f9496cbf53a4c5c2d283697d
+  version: 1.3.9
+  date: 2026-07-08 16:30:00
+  path: packages/chaturbate-v1.3.9.zip
+  sha256: e02af0e60f66420a5e45d51d49d17e3a8f2d1cf1ca46fad9c1190c3e319b8fc2
   metadata:
     description: Browse and watch Chaturbate cams inside Stash.
     url: https://github.com/SJoWie80/Stash-Plugins
@@ -20,30 +20,30 @@
 
 - id: folder-view
   name: Folder View
-  version: 1.2.2
-  date: 2026-07-01 17:00:00
-  path: packages/folder-view-v1.2.2.zip
-  sha256: c52f9476ed70ec2dc9933cd3565b13b1d631fa0cbb2266f5e7aa1a046ad9eaea
+  version: 1.2.3
+  date: 2026-07-08 16:30:00
+  path: packages/folder-view-v1.2.3.zip
+  sha256: 0e98d52bfb01a3e2f582f62a58be8b0cfda50d71360aa0e0a2cdab100f1b80c4
   metadata:
     description: Browse scenes, galleries, and images through a Stash library folder tree.
     url: https://github.com/SJoWie80/Stash-Plugins
 
 - id: now-playing
   name: Now Playing
-  version: 1.2.2
-  date: 2026-07-01 17:00:00
-  path: packages/now-playing-v1.2.2.zip
-  sha256: bc25b90b4e21d16e7adbc96d1797428080128fb5a9e9acb7c8f18816884d4db8
+  version: 1.2.3
+  date: 2026-07-08 16:30:00
+  path: packages/now-playing-v1.2.3.zip
+  sha256: d0f36ff8f6989b1a4360d2037c889e49496ea99db645ecc9a3b77e677bb3bfbc
   metadata:
     description: Shows active Stash playback from browser sessions and server-side scene activity.
     url: https://github.com/SJoWie80/Stash-Plugins
 
 - id: tag-image-picker
   name: Tag Icon Studio
-  version: 0.2.15
-  date: 2026-07-06 00:21:00
-  path: packages/tag-image-picker-v0.2.15.zip
-  sha256: e9636ba1ffa52560c7094181029184769341180b4224fdfd62e238cc301b3e4a
+  version: 0.2.16
+  date: 2026-07-08 16:30:00
+  path: packages/tag-image-picker-v0.2.16.zip
+  sha256: a2cb4c48af3ab32a2f76496b9d72ed11fdff4df5c39183883f634f225763e066
   metadata:
     description: Generate or import consistent icon artwork and assign it to Stash tags.
     url: https://github.com/SJoWie80/Stash-Plugins

@@ -1,26 +1,5 @@
-.stash-np-nav-wrap {
-  display: inline-flex;
-}
-
-.stash-np-nav-button {
-  align-items: center;
-  color: inherit;
-  display: inline-flex;
-  gap: 0.4rem;
-  white-space: nowrap;
-}
-
-.stash-np-nav-button:hover,
-.stash-np-nav-button:focus,
-.stash-np-nav-button.active {
-  color: #fff;
-  text-decoration: none;
-}
-
 .stash-np-nav-icon {
-  color: #6fd08c;
-  font-size: 0.95rem;
-  opacity: 0.95;
+  color: currentColor;
 }
 
 .stash-np-app {

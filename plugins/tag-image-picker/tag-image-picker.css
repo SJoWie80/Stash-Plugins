@@ -1,6 +1,4 @@
-.stash-tip-nav-wrap { display: inline-flex; }
-.stash-tip-nav-button { align-items: center; color: inherit; display: inline-flex; gap: 0.4rem; white-space: nowrap; }
-.stash-tip-nav-button:hover, .stash-tip-nav-button:focus { color: #fff; text-decoration: none; }
+.stash-tip-nav-icon { color: currentColor; }
 .stash-tip-launcher { background: #3c5364; border: 1px solid rgba(255,255,255,.25); border-radius: 6px; bottom: 1rem; box-shadow: 0 .5rem 1.5rem rgba(0,0,0,.35); color: #fff; cursor: pointer; min-height: 2.4rem; padding: .45rem .8rem; position: fixed; right: 1rem; z-index: 9999; }
 .stash-tip-app[hidden] { display: none !important; }
 .stash-tip-app { background: var(--body-bg, #202124); color: var(--body-color, #f3f4f6); min-height: calc(100vh - 56px); padding: 1.25rem; }
@@ -26,7 +24,7 @@
 .stash-tip-page-button:disabled { cursor: default; opacity: .45; }
 .stash-tip-page-label { color: #aeb6c2; font-size: .82rem; overflow: hidden; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 .stash-tip-tag { align-items: center; background: #252932; border: 1px solid rgba(255,255,255,.12); border-radius: 6px; color: inherit; cursor: pointer; display: grid; gap: .5rem; grid-template-columns: minmax(0, 1fr) auto; min-height: 2.35rem; padding: .4rem .55rem; text-align: left; }
-.stash-tip-tag[aria-pressed="true"], .stash-tip-nav-button.active { background: #3c5364; border-color: rgba(255,255,255,.24); }
+.stash-tip-tag[aria-pressed="true"] { background: #3c5364; border-color: rgba(255,255,255,.24); }
 .stash-tip-tag-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stash-tip-tag-meta { color: #aeb6c2; font-size: .78rem; }
 .stash-tip-work { min-width: 0; }

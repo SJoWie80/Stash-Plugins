@@ -1,24 +1,5 @@
-.stash-fv-nav-wrap {
-  display: inline-flex;
-}
-
-.stash-fv-nav-button {
-  align-items: center;
-  color: inherit;
-  display: inline-flex;
-  gap: 0.4rem;
-  white-space: nowrap;
-}
-
-.stash-fv-nav-button:hover,
-.stash-fv-nav-button:focus {
-  color: #fff;
-  text-decoration: none;
-}
-
 .stash-fv-nav-icon {
-  font-size: 0.95rem;
-  opacity: 0.88;
+  color: currentColor;
 }
 
 .stash-fv-launcher {
@@ -112,8 +93,7 @@
 }
 
 .stash-fv-tab[aria-pressed="true"],
-.stash-fv-tree-folder[aria-pressed="true"],
-.stash-fv-nav-button.active {
+.stash-fv-tree-folder[aria-pressed="true"] {
   background: #516171;
   border-color: rgba(255, 255, 255, 0.22);
 }

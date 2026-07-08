@@ -10,6 +10,10 @@
   const ACTIVITY_POLL_MS = 10000;
   const ACTIVITY_PAGE_SIZE = 250;
   const ACTIVITY_MAX_PAGES = 40;
+  const NAV_ICON =
+    '<svg aria-hidden="true" focusable="false" class="svg-inline--fa fa-icon nav-menu-icon d-block d-xl-inline mb-2 mb-xl-0 stash-np-nav-icon" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">' +
+    '<path fill="currentColor" d="M8 5.7v12.6c0 .95 1.04 1.53 1.85 1.03l9.9-6.3a1.22 1.22 0 0 0 0-2.06l-9.9-6.3A1.22 1.22 0 0 0 8 5.7ZM4 6a1 1 0 0 1 2 0v12a1 1 0 1 1-2 0V6Z"/>' +
+    "</svg>";
 
   const state = {
     pluginId: "",
@@ -323,7 +327,7 @@
   }
 
   function findNav() {
-    const preferred = document.querySelector(".navbar-collapse .navbar-nav");
+    const preferred = document.querySelector("nav .navbar-nav") || document.querySelector(".navbar-collapse .navbar-nav");
     if (preferred) return preferred;
     const labels = ["Scenes", "Images", "Groups", "Markers", "Performers", "Studios", "Tags"];
     return Array.from(document.querySelectorAll("nav, header, .navbar, .navbar-nav, .btn-toolbar, div")).find((node) => {
@@ -335,13 +339,18 @@
   function addNav() {
     if (document.getElementById(NAV_ID)) return;
     const nav = findNav();
-    if (!nav) return;
+    const scenesLink = document.querySelector('a[href="/scenes"]') || document.querySelector('a[href="/scenes/"]');
+    if (!nav || !scenesLink) return;
     const wrap = el("div", "stash-np-nav-wrap");
     wrap.id = NAV_ID;
-    const link = el("a", "nav-link stash-np-nav-button");
+    wrap.className = scenesLink.parentElement ? scenesLink.parentElement.className : "nav-item";
+    const link = el("a", "");
     link.href = ROUTE;
-    link.appendChild(el("span", "fa fa-play-circle fas fa-play-circle stash-np-nav-icon"));
-    link.appendChild(el("span", "stash-np-nav-text", "Now Playing"));
+    link.id = "stash-np-nav-button";
+    link.title = "Now Playing";
+    link.setAttribute("aria-label", "Now Playing");
+    link.className = `${scenesLink.className.replace(/\bactive\b/g, "").trim()} stash-np-nav-button`.trim();
+    link.innerHTML = `${NAV_ICON}<span>Now Playing</span>`;
     link.addEventListener("click", navigate);
     wrap.appendChild(link);
     nav.appendChild(wrap);
@@ -488,6 +497,9 @@
 
   const observer = new MutationObserver(addNav);
   observer.observe(document.documentElement, { childList: true, subtree: true });
+  if (window.PluginApi && window.PluginApi.Event && window.PluginApi.Event.addEventListener) {
+    window.PluginApi.Event.addEventListener("stash:location", addNav);
+  }
   window.addEventListener("popstate", render);
   window.addEventListener("stash-now-playing-route", render);
   if (document.readyState === "loading") {

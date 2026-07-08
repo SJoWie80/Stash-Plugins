@@ -20,6 +20,7 @@ Then open `Settings > Plugins`, reload plugin sources, and install the plugins y
 ## Included Plugins
 
 - `Chaturbate` - browse and watch Chaturbate cams inside Stash.
+- `Duplicate Checker` - find likely duplicate scenes by fingerprint, file size, and duration.
 - `Folder View` - browse scenes and galleries grouped by filesystem folder.
 - `Now Playing` - show active Stash web playback sessions reported by connected browsers.
 - `Tag Icon Studio` - generate or import consistent icon artwork and assign it to Stash tags.

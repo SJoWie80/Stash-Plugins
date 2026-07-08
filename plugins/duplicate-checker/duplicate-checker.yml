@@ -1,0 +1,10 @@
+name: Duplicate Checker
+description: Find likely duplicate scenes by fingerprint, file size, and duration.
+version: 0.1.0
+url: https://github.com/SJoWie80/Stash-Plugins
+interface: raw
+ui:
+  javascript:
+    - duplicate-checker.js
+  css:
+    - duplicate-checker.css

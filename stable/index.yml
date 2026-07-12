@@ -38,6 +38,16 @@
     description: Shows active Stash playback from browser sessions and server-side scene activity.
     url: https://github.com/SJoWie80/Stash-Plugins
 
+- id: spotweb-studio
+  name: Spotweb Studio Downloads
+  version: 0.1.0
+  date: 2026-07-12 12:00:00
+  path: packages/spotweb-studio-v0.1.0.zip
+  sha256: ea46bff18a6d6520631015d5a69cf1bd66a225328f5fe08d8b65cd026254b5e0
+  metadata:
+    description: Zoek Spotweb NZB's per Stash-studio en stuur ontbrekende releases naar SABnzbd.
+    url: https://github.com/SJoWie80/Stash-Plugins
+
 - id: tag-image-picker
   name: Tag Icon Studio
   version: 0.2.17

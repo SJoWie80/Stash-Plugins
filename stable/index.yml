@@ -41,7 +41,7 @@
 - id: spotweb-studio
   name: Spotweb Studio Downloads
   version: 0.1.7
-  date: 2026-07-12 12:00:00
+  date: 2026-07-12 23:00:00
   path: packages/spotweb-studio-v0.1.7.zip
   sha256: 9851e366968bf9449e78c5c68e4939bcd756e5df53983fa8ec0625ae6bfae999
   metadata:

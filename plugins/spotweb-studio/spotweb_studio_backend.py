@@ -18,7 +18,7 @@ def main():
     base, key, query = val(a,"spotwebUrl").rstrip("/"), val(a,"spotwebKey"), val(a,"query")
     queries = [query]
     compact = "".join(query.split())
-    if compact and compact.lower() != query.replace(" ", "").lower(): queries.append(compact)
+    if compact and compact.lower() != query.lower(): queries.append(compact)
     items=[]; seen=set()
     for search_query in queries:
       params = {"t":"search","q":search_query,"apikey":key,"o":"xml","limit":val(a,"limit","100")}

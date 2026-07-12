@@ -1,6 +1,6 @@
 name: Spotweb Studio Downloads
 description: Zoek Spotweb NZB's per Stash-studio en stuur ontbrekende releases naar SABnzbd.
-version: 0.1.5
+version: 0.1.6
 url: https://github.com/SJoWie80/Stash-Plugins
 exec:
   - python

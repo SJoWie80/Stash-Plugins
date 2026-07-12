@@ -43,7 +43,7 @@
   version: 0.1.0
   date: 2026-07-12 12:00:00
   path: packages/spotweb-studio-v0.1.0.zip
-  sha256: 02e318ed16f6cfea9402a279823e94a30e103942a1f6104a53c1b2bb901e504f
+  sha256: 8c5ad5b003bc72b9ffd9544612c7af21777a31b4b881773adf1ddd60082f98a4
   metadata:
     description: Zoek Spotweb NZB's per Stash-studio en stuur ontbrekende releases naar SABnzbd.
     url: https://github.com/SJoWie80/Stash-Plugins

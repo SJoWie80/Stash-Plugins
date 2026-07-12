@@ -16,14 +16,24 @@ def main():
         q = {"mode":"addurl","name":nzb,"nzbname":name,"output":"json","apikey":sabkey}
         raw = request(sab + "/api?" + urllib.parse.urlencode(q)); return {"output": json.loads(raw.decode("utf-8"))}
     base, key, query = val(a,"spotwebUrl").rstrip("/"), val(a,"spotwebKey"), val(a,"query")
-    params = {"t":"search","q":query,"apikey":key,"o":"xml","limit":val(a,"limit","100")}
-    raw = request(base + "/api?" + urllib.parse.urlencode(params)); root = ET.fromstring(raw); items=[]
-    for x in root.findall(".//item"):
+    queries = [query]
+    compact = "".join(query.split())
+    if compact and compact.lower() != query.replace(" ", "").lower(): queries.append(compact)
+    items=[]; seen=set()
+    for search_query in queries:
+      params = {"t":"search","q":search_query,"apikey":key,"o":"xml","limit":val(a,"limit","100")}
+      raw = request(base + "/api?" + urllib.parse.urlencode(params)); root = ET.fromstring(raw)
+      for x in root.findall(".//item"):
         def text(n): return (x.findtext(n) or "").strip()
         link = text("enclosure") or text("link")
         enc = x.find("enclosure")
         if enc is not None: link = enc.attrib.get("url", link)
-        items.append({"id":text("guid"),"title":text("title"),"pubDate":text("pubDate"),"size":text("size"),"nzbUrl":link})
+        ident=text("guid") or link
+        if ident in seen: continue
+        seen.add(ident)
+        size=text("size") or (enc.attrib.get("length", "") if enc is not None else "")
+        items.append({"id":ident,"title":text("title"),"pubDate":text("pubDate"),"size":size,"nzbUrl":link})
+    items.sort(key=lambda x: ((x.get("title") or "").lower(), x.get("pubDate") or ""), reverse=False)
     return {"output":{"items":items}}
 
 try: print(json.dumps(main()))
